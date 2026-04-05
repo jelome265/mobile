@@ -83,9 +83,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   @override
   void initState() {
     super.initState();
-    // Cancel pending seek or challenges when app goes to background to prevent games being created
+    // Cancel pending seek when app goes to background to prevent games being created
     // while the user is away from the app.
-    _appLifecycleListener = AppLifecycleListener(onPause: _cancelSeekOrChallenge);
+    _appLifecycleListener = AppLifecycleListener(onPause: _cancelSeek);
   }
 
   @override
@@ -94,10 +94,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     super.dispose();
   }
 
-  Future<void> _cancelSeekOrChallenge() async {
+  Future<void> _cancelSeek() async {
     if (!mounted) return;
     final loader = ref.read(gameScreenLoaderProvider(widget.source));
-    // Only cancel if we are still seeking or waiting for challenge to be accepted
+    // Only cancel if we are still seeking
     if (loader is! AsyncLoading<GameScreenState>) {
       return;
     }
@@ -105,7 +105,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       case LobbySource():
         await ref.read(createGameServiceProvider).cancelSeek();
       case UserChallengeSource():
-        await ref.read(createGameServiceProvider).cancelChallenge();
+        break;
       case ExistingGameSource():
         break;
     }
@@ -213,11 +213,29 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           body: Theme.of(context).platform == TargetPlatform.android
               ? AndroidGesturesExclusionWidget(
                   boardKey: _boardKey,
-                  shouldExcludeGesturesOnFocusGained: () => isRealTimePlayingGame,
+                  shouldExcludeGesturesOnFocusGained: isRealTimePlayingGame,
                   shouldSetImmersiveMode: boardPreferences.immersiveModeWhilePlaying ?? false,
                   child: body,
                 )
               : body,
+        );
+      case AsyncData(value: OpenChallengeCreatedState(:final challenge)):
+        return Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            leading: const SocketPingRatingIcon(),
+            title: _ChallengeGameTitle(
+              challenge: (widget.source as UserChallengeSource).challengeRequest,
+            ),
+          ),
+          body: PopScope(
+            canPop: false,
+            child: OpenChallengeLoadingContent(
+              id: challenge.id,
+              challengeRequest: (widget.source as UserChallengeSource).challengeRequest,
+              cancelChallenge: ref.read(createGameServiceProvider).cancelChallenge,
+            ),
+          ),
         );
       case AsyncError(error: final e, stackTrace: final s):
         debugPrint('SEVERE: [GameScreen] could not create game; $e\n$s');
@@ -247,7 +265,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             seek,
             () => ref.read(createGameServiceProvider).cancelSeek(),
           ),
-          UserChallengeSource(:final challengeRequest) => ChallengeLoadingContent(
+          UserChallengeSource(:final challengeRequest) => UserChallengeLoadingContent(
             challengeRequest,
             () => ref.read(createGameServiceProvider).cancelChallenge(),
           ),
@@ -263,9 +281,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             leading: const SocketPingRatingIcon(),
             title: switch (widget.source) {
               LobbySource(:final seek) => _LobbyGameTitle(seek: seek),
-              UserChallengeSource(:final challengeRequest) => _ChallengeGameTitle(
-                challenge: challengeRequest,
-              ),
+              UserChallengeSource(:final challengeRequest) when challengeRequest.destUser != null =>
+                _ChallengeGameTitle(challenge: challengeRequest),
               _ => const SizedBox.shrink(),
             },
           ),

@@ -19,13 +19,20 @@ import 'package:lichess_mobile/src/model/game/game.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
 import 'package:lichess_mobile/src/model/settings/preferences_storage.dart';
 import 'package:lichess_mobile/src/network/http.dart';
+import 'package:lichess_mobile/src/network/socket.dart';
 import 'package:lichess_mobile/src/styles/lichess_icons.dart';
 import 'package:lichess_mobile/src/view/analysis/analysis_screen.dart';
+import 'package:lichess_mobile/src/view/engine/engine_button.dart';
 import 'package:lichess_mobile/src/view/engine/engine_gauge.dart';
 import 'package:lichess_mobile/src/view/engine/engine_lines.dart';
+import 'package:lichess_mobile/src/view/more/more_tab_screen.dart';
 import 'package:lichess_mobile/src/widgets/bottom_bar.dart';
 import 'package:lichess_mobile/src/widgets/pgn.dart';
+import 'package:lichess_mobile/src/widgets/pockets.dart';
+import 'package:multistockfish/multistockfish.dart';
 
+import '../../binding.dart';
+import '../../model/engine/fake_stockfish.dart';
 import '../../network/fake_websocket_channel.dart';
 import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
@@ -44,7 +51,8 @@ void main() {
       final app = await makeTestProviderScopeApp(
         tester,
         home: AnalysisScreen(
-          options: AnalysisOptions.standalone(
+          options: AnalysisOptions.pgn(
+            id: const StringId('standalone'),
             orientation: Side.white,
             pgn: sanMoves,
             isComputerAnalysisAllowed: false,
@@ -70,7 +78,8 @@ void main() {
       final app = await makeTestProviderScopeApp(
         tester,
         home: AnalysisScreen(
-          options: AnalysisOptions.standalone(
+          options: AnalysisOptions.pgn(
+            id: const StringId('standalone'),
             orientation: Side.white,
             pgn: sanMoves,
             isComputerAnalysisAllowed: false,
@@ -103,6 +112,170 @@ void main() {
         isTrue,
       );
     });
+
+    testWidgets('change variant in standalone analysis', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(options: AnalysisOptions.standalone(variant: Variant.standard)),
+      );
+
+      await tester.pumpWidget(app);
+
+      expect(find.byType(PocketsMenu), findsNothing);
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle(); // wait for menu to open
+
+      expect(find.text('Variant'), findsOneWidget);
+
+      await tester.tap(find.text('Variant'));
+      await tester.pumpAndSettle(); // wait for dialog to open
+
+      expect(find.textContaining('Standard'), findsNWidgets(2)); // title and description
+      expect(find.textContaining('Chess960'), findsNothing);
+      expect(find.textContaining('From Position'), findsNothing);
+      expect(find.textContaining('Antichess'), findsOneWidget);
+      expect(find.textContaining('King of the Hill'), findsOneWidget);
+      expect(find.textContaining('Three Check'), findsOneWidget);
+      expect(find.textContaining('Atomic'), findsOneWidget);
+      expect(find.textContaining('Horde'), findsOneWidget);
+      expect(find.textContaining('Racing Kings'), findsOneWidget);
+      expect(find.textContaining('Crazyhouse'), findsOneWidget);
+
+      await tester.ensureVisible(find.textContaining('Horde')); // scroll if needed
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Horde'));
+      await tester.pumpAndSettle(); // wait for dialog to close and new variant to be loaded
+
+      expect(find.byType(PocketsMenu), findsNothing);
+
+      // Horde starting position should be loaded:
+      expect(find.byKey(const ValueKey('b5-whitepawn')), findsOneWidget);
+
+      // Change to crazhouse, pockets should be displayed:
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle(); // wait for menu to open
+      await tester.tap(find.text('Variant'));
+      await tester.pumpAndSettle(); // wait for dialog to open
+      await tester.ensureVisible(find.textContaining('Crazyhouse')); // scroll if needed
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Crazyhouse'));
+      await tester.pumpAndSettle(); // wait for dialog to close and new variant to be loaded
+
+      // One for white, one for black
+      expect(find.byType(PocketsMenu), findsNWidgets(2));
+    });
+
+    testWidgets('Cannot change variant in PGN analysis', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('standalone'),
+            pgn: '',
+            isComputerAnalysisAllowed: false,
+            orientation: Side.white,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+
+      expect(find.byType(PocketsMenu), findsNothing);
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle(); // wait for menu to open
+
+      expect(find.text('Variant'), findsNothing);
+    });
+
+    testWidgets('Crazyhouse support DropMoves for both sides', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('standalone'),
+            orientation: Side.white,
+            pgn: '''
+              [Variant "Crazyhouse"]
+              [FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"]
+              1. e4 d5 2. exd5 Qxd5
+            ''',
+            isComputerAnalysisAllowed: false,
+            variant: Variant.crazyhouse,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+
+      expect(find.byType(PocketsMenu), findsNWidgets(2));
+
+      await playDropMove(tester, Side.white, Role.pawn, 'a4');
+      expect(find.byKey(const ValueKey('a4-whitepawn')), findsOneWidget);
+
+      // Illegal drop move for black, should not be played
+      await playDropMove(tester, Side.black, Role.queen, 'h5');
+      expect(find.byKey(const ValueKey('h5-blackqueen')), findsNothing);
+
+      await playDropMove(tester, Side.black, Role.pawn, 'h5');
+      expect(find.byKey(const ValueKey('h5-blackpawn')), findsOneWidget);
+    });
+
+    testWidgets('Continue against computer', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('standalone'),
+            orientation: Side.white,
+            pgn: '',
+            isComputerAnalysisAllowed: true,
+            variant: Variant.atomic,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle(); // wait for menu to open
+      await tester.tap(find.text('Continue from here'));
+      await tester.pumpAndSettle(); // wait for dialog to open
+
+      await tester.tap(find.text('Play against computer'));
+      await tester.pumpAndSettle(); // wait for play menu to open
+      // Variant we set previously should be preselected
+      expect(find.textContaining('Atomic'), findsOneWidget);
+    });
+
+    testWidgets('Continue OTB', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('standalone'),
+            orientation: Side.white,
+            pgn: '',
+            isComputerAnalysisAllowed: true,
+            variant: Variant.atomic,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle(); // wait for menu to open
+      await tester.tap(find.text('Continue from here'));
+      await tester.pumpAndSettle(); // wait for dialog to open
+
+      await tester.tap(find.text('Over the board'));
+      await tester.pumpAndSettle(); // wait for play menu to open
+      // Variant we set previously should be preselected
+      expect(find.text('Atomic'), findsOneWidget);
+    });
   });
 
   group('Analysis Tree View', () {
@@ -128,7 +301,8 @@ void main() {
         home: AnalysisScreen(
           options:
               options ??
-              AnalysisOptions.standalone(
+              AnalysisOptions.pgn(
+                id: const StringId('standalone'),
                 orientation: Side.white,
                 pgn: pgn,
                 isComputerAnalysisAllowed: false,
@@ -621,6 +795,111 @@ void main() {
           expect(find.text('13. dxe6'), findsNothing);
         },
       );
+
+      testWidgets('eval is updated in move tree when it corresponds to current path', (
+        tester,
+      ) async {
+        await makeEngineTestApp(tester, isCloudEvalEnabled: false);
+
+        // Make a move (1. e4)
+        await playMove(tester, 'e2', 'e4');
+        expect(find.byType(InlineMove), findsOne);
+
+        // Before any eval is emitted, no eval should be displayed
+        expect(find.widgetWithText(InlineMove, '+0.2'), findsNothing);
+
+        await tester.pump(kRequestEvalDebounceDelay + kEngineEvalEmissionThrottleDelay);
+
+        expect(find.widgetWithText(InlineMove, '+0.2'), findsOne);
+      });
+
+      testWidgets('different positions show different evals in move tree', (tester) async {
+        final stockfish = AnalysisTestStockfish();
+        await makeEngineTestApp(tester, isCloudEvalEnabled: false, stockfish: stockfish);
+
+        await playMove(tester, 'e2', 'e4');
+        await tester.pump(kRequestEvalDebounceDelay);
+
+        // check engine is started
+        expect(stockfish.state.value, StockfishState.ready);
+
+        stockfish.emitNextDepth();
+        await tester.pump(kEngineEvalEmissionThrottleDelay);
+
+        expect(stockfish.requestedPositions.length, 1);
+
+        // should see depth 6
+        expect(find.widgetWithText(EngineButton, '6'), findsOne);
+
+        // e4 should show +0.2 (ply 1 -> cp 20)
+        expect(find.widgetWithText(InlineMove, '+0.2'), findsOne);
+
+        await playMove(tester, 'e7', 'e5');
+        expect(find.byType(InlineMove), findsNWidgets(2));
+
+        await tester.pump(kRequestEvalDebounceDelay + kEngineEvalEmissionThrottleDelay);
+
+        expect(stockfish.requestedPositions.length, 2);
+
+        stockfish.emitDepthRange(toDepth: 10);
+        await tester.pump(kEngineEvalEmissionThrottleDelay);
+
+        expect(find.widgetWithText(EngineButton, '10'), findsOne);
+
+        // After e5, position has ply=2, so cp=30 which displays as +0.3
+        expect(find.widgetWithText(InlineMove, '+0.2'), findsOne);
+        expect(find.widgetWithText(InlineMove, '+0.3'), findsOne);
+      });
+    });
+
+    group('Engine analysis on move navigation', () {
+      testWidgets('evaluation is debounced when jumping quickly between moves', (tester) async {
+        final stockfish = AnalysisTestStockfish();
+        await makeEngineTestApp(tester, isCloudEvalEnabled: false, stockfish: stockfish);
+
+        // Make several moves
+        await playMove(tester, 'e2', 'e4');
+        await playMove(tester, 'e7', 'e5');
+        await playMove(tester, 'g1', 'f3');
+        await playMove(tester, 'b8', 'c6');
+
+        // Wait for initial eval request
+        await tester.pump(kRequestEvalDebounceDelay);
+
+        // Clear the tracking to start fresh for navigation test
+        stockfish.resetTracking();
+
+        // Rapidly navigate through moves (faster than debounce delay of 250ms)
+        await tester.tap(find.byKey(const Key('goto-previous')));
+        await tester.pump(const Duration(milliseconds: 50));
+
+        await tester.tap(find.byKey(const Key('goto-previous')));
+        await tester.pump(const Duration(milliseconds: 50));
+
+        await tester.tap(find.byKey(const Key('goto-previous')));
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // Due to debouncing, no eval requests should have been sent yet
+        expect(stockfish.requestedPositions, isEmpty);
+
+        // Wait for the debounce delay to elapse
+        await tester.pump(kRequestEvalDebounceDelay);
+
+        // Only ONE eval request should have been sent (for the final position)
+        expect(stockfish.requestedPositions.length, 1);
+
+        // Verify it's for the correct position (after 1. e4)
+        expect(stockfish.requestedPositions.first, contains('4P3'));
+
+        // Emit eval for this position
+        stockfish.emitNextDepth();
+        await tester.pump();
+
+        // Eval should be displayed (depth 6) with arrow
+        expect(find.widgetWithText(EngineButton, '$kMinEngineDepth'), findsOne);
+        expect(find.widgetWithText(InlineMove, '+0.2'), findsOne);
+        expect(find.byType(BoardShapeWidget), findsOne);
+      });
     });
 
     group('Engine lines', () {
@@ -665,6 +944,58 @@ void main() {
         // ensure that the eval is displayed and pending eval throttle time is over
         await tester.pump(kRequestEvalDebounceDelay + kEngineEvalEmissionThrottleDelay);
         expect(find.byType(Engineline), findsNothing);
+      });
+
+      testWidgets('can be tapped to play a drop move in crazyhouse', (tester) async {
+        final binding = TestLichessBinding.ensureInitialized();
+        final stockfish = FakeCrazyhouseDropMoveStockfish();
+        binding.stockfish = stockfish;
+        addTearDown(() => binding.stockfish = FakeStockfish());
+
+        final app = await makeTestProviderScopeApp(
+          tester,
+          defaultPreferences: {
+            PrefCategory.engineEvaluation.storageKey: jsonEncode(
+              EngineEvaluationPrefState.defaults
+                  .copyWith(numEvalLines: 1, isEnabled: true)
+                  .toJson(),
+            ),
+          },
+          home: const AnalysisScreen(
+            options: AnalysisOptions.pgn(
+              id: StringId('standalone'),
+              orientation: Side.white,
+              // Position after 1.e4 d5 2.exd5 Qxd5: white has a pawn in pocket
+              pgn: '''
+                [Variant "Crazyhouse"]
+                [FEN "rnb1kbnr/ppp1pppp/8/3q4/8/8/PPPP1PPP/RNBQKBNR[Pp] w KQkq - 0 3"]
+              ''',
+              isComputerAnalysisAllowed: true,
+              variant: Variant.crazyhouse,
+            ),
+          ),
+          overrides: {
+            webSocketChannelFactoryProvider: webSocketChannelFactoryProvider.overrideWith(
+              (_) => FakeWebSocketChannelFactory(
+                (uri) => FakeWebSocketChannel(uri, serverHandlers: {}),
+              ),
+            ),
+          },
+        );
+        await tester.pumpWidget(app);
+
+        // Wait for engine to start and emit eval
+        await tester.pump(kRequestEvalDebounceDelay + kEngineEvalEmissionThrottleDelay);
+
+        // Engine line starting with a drop move should be displayed
+        expect(find.byType(Engineline), findsOneWidget);
+
+        // Tapping the engine line plays P@c4 (drop move)
+        await tester.tap(find.byType(Engineline));
+        await tester.pumpAndSettle();
+
+        // White pawn should appear on c4 after the drop move
+        expect(find.byKey(const ValueKey('c4-whitepawn')), findsOneWidget);
       });
     });
 
@@ -748,6 +1079,87 @@ void main() {
         expect(find.byType(BoardShapeWidget), findsOne);
       });
     });
+
+    group('show threat button', () {
+      testWidgets('is visible when engine is available and position is normal', (tester) async {
+        await makeEngineTestApp(tester, pgn: 'e4 e5');
+
+        await tester.tap(find.bySemanticsLabel('Menu'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show threat'), findsOneWidget);
+      });
+
+      testWidgets('is hidden when king is in check', (tester) async {
+        await makeEngineTestApp(
+          tester,
+          // Ends with Qxe5+: black king is in check
+          pgn: 'e4 e5 Qh5 Nf6 Qxe5+',
+        );
+
+        await tester.tap(find.bySemanticsLabel('Menu'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show threat'), findsNothing);
+      });
+
+      testWidgets('is hidden when position is checkmate', (tester) async {
+        await makeEngineTestApp(
+          tester,
+          pgn: sanMoves, // ends with checkmate
+        );
+
+        await tester.tap(find.bySemanticsLabel('Menu'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show threat'), findsNothing);
+      });
+
+      testWidgets('is hidden when opponent would be in stalemate', (tester) async {
+        await makeEngineTestApp(
+          tester,
+          pgn: '''
+[Variant "From Position"]
+[FEN "5bnr/4p1pq/4Qpkr/7p/7P/4P3/PPPP1PP1/RNB1KBNR w KQ - 2 10"]
+''',
+        );
+
+        await tester.tap(find.bySemanticsLabel('Menu'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show threat'), findsNothing);
+      });
+
+      testWidgets('is hidden when position is stalemate for both sides', (tester) async {
+        await makeEngineTestApp(
+          tester,
+          pgn: '''
+[Variant "From Position"]
+[FEN "8/8/8/pp6/qp6/kp6/1p6/1K6 b - - 0 1"]
+''',
+        );
+
+        await tester.tap(find.bySemanticsLabel('Menu'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show threat'), findsNothing);
+      });
+
+      testWidgets('is visible when position is stalemate but opponent can move', (tester) async {
+        await makeEngineTestApp(
+          tester,
+          pgn: '''
+[Variant "From Position"]
+[FEN "5bnr/4p1pq/4Qpkr/7p/7P/4P3/PPPP1PP1/RNB1KBNR b KQ - 2 10"]
+''',
+        );
+
+        await tester.tap(find.bySemanticsLabel('Menu'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Show threat'), findsOneWidget);
+      });
+    });
   });
 
   group('Castling', () {
@@ -764,7 +1176,8 @@ void main() {
             ),
           },
           home: const AnalysisScreen(
-            options: AnalysisOptions.standalone(
+            options: AnalysisOptions.pgn(
+              id: StringId('standalone'),
               orientation: Side.white,
               pgn: castlingSetupPgn,
               isComputerAnalysisAllowed: false,
@@ -812,7 +1225,8 @@ void main() {
           },
           home: AnalysisScreen(
             key: ValueKey(castlingMethod),
-            options: const AnalysisOptions.standalone(
+            options: const AnalysisOptions.pgn(
+              id: StringId('standalone'),
               orientation: Side.white,
               pgn: castlingSetupPgn,
               isComputerAnalysisAllowed: false,
@@ -838,13 +1252,191 @@ void main() {
       });
     }
   });
+  testWidgets('saves and restores root and path when navigating away and back', (tester) async {
+    // open from More tab and navigate to board analysis
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const MoreTabScreen(),
+      defaultPreferences: {
+        PrefCategory.engineEvaluation.storageKey: jsonEncode(
+          EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+        ),
+      },
+    );
+
+    await tester.pumpWidget(app);
+
+    // Tap on "Analysis" button in More tab
+    await tester.tap(find.text('Analysis board'));
+    await tester.pumpAndSettle();
+
+    // Change variant to Racing Kings to verify that variant is also saved/restored correctly
+    await tester.tap(find.bySemanticsLabel('Menu'));
+    await tester.pumpAndSettle(); // wait for menu to open
+    await tester.tap(find.text('Variant'));
+    await tester.pumpAndSettle(); // wait for variant selection dialog to open
+    await tester.ensureVisible(find.textContaining('Racing Kings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Racing Kings'));
+    await tester.pumpAndSettle(); // wait for variant to change
+
+    // Make some moves
+    await playMove(tester, 'e2', 'd4');
+    await playMove(tester, 'a2', 'a3');
+    await playMove(tester, 'h2', 'g3');
+
+    // Verify we made the moves
+    expect(find.textContaining('Nd4'), findsOneWidget);
+    expect(find.textContaining('Ka3'), findsOneWidget);
+    expect(find.textContaining('Kg3'), findsOneWidget);
+
+    // go back a move
+    await tester.tap(find.byKey(const Key('goto-previous')));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('d4-whiteknight')), findsOneWidget);
+    expect(find.byKey(const ValueKey('a3-blackking')), findsOneWidget);
+    expect(find.byKey(const ValueKey('g3-whiteking')), findsNothing);
+
+    // Navigate back to More tab
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Verify we're back at More tab
+    expect(find.text('Tools'), findsOneWidget);
+
+    // Navigate to board analysis again
+    await tester.tap(find.text('Analysis board'));
+    await tester.pumpAndSettle();
+
+    // Verify moves are still present and session was restored
+    expect(find.textContaining('Nd4'), findsOneWidget);
+    expect(find.textContaining('Ka3'), findsOneWidget);
+    expect(find.textContaining('Kg3'), findsOneWidget);
+
+    // Verify board state is correct
+    expect(find.byKey(const ValueKey('d4-whiteknight')), findsOneWidget);
+    expect(find.byKey(const ValueKey('a3-blackking')), findsOneWidget);
+    expect(find.byKey(const ValueKey('g3-whiteking')), findsNothing);
+  });
+  testWidgets('Clear moves clears standalone analysis', (tester) async {
+    // Open from More tab and navigate to board analysis
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const MoreTabScreen(),
+      defaultPreferences: {
+        PrefCategory.engineEvaluation.storageKey: jsonEncode(
+          EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+        ),
+      },
+    );
+
+    await tester.pumpWidget(app);
+
+    // Open analysis board
+    await tester.tap(find.text('Analysis board'));
+    await tester.pumpAndSettle();
+
+    // Make some moves
+    await playMove(tester, 'e2', 'e4');
+    await playMove(tester, 'e7', 'e5');
+    await playMove(tester, 'f2', 'f4');
+
+    // Verify we made the moves
+    expect(find.textContaining('f4'), findsOneWidget);
+    expect(find.byKey(const ValueKey('f4-whitepawn')), findsOneWidget);
+
+    //open menu
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pump();
+
+    //tap Clear moves
+    expect(find.text('Clear moves'), findsOneWidget);
+    await tester.tap(find.text('Clear moves'));
+    await tester.pump();
+
+    //verify moves are cleared
+    expect(find.textContaining('e4'), findsNothing);
+    expect(find.byKey(const ValueKey('e4-whitepawn')), findsNothing);
+
+    // Navigate back to More tab
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Verify we're back at More tab
+    expect(find.text('Tools'), findsOneWidget);
+
+    // Navigate to board analysis again
+    await tester.tap(find.text('Analysis board'));
+    await tester.pumpAndSettle();
+
+    // Verify moves are no longer present and analysis was cleared
+    expect(find.textContaining('e4'), findsNothing);
+    expect(find.byKey(const ValueKey('e4-whitepawn')), findsNothing);
+  });
+
+  testWidgets('Opening a position from board editor overwrites saved standalone analysis', (
+    tester,
+  ) async {
+    // Open from More tab and navigate to board analysis
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const MoreTabScreen(),
+      defaultPreferences: {
+        PrefCategory.engineEvaluation.storageKey: jsonEncode(
+          EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+        ),
+      },
+    );
+
+    await tester.pumpWidget(app);
+
+    // Open analysis board
+    await tester.tap(find.text('Analysis board'));
+    await tester.pumpAndSettle();
+
+    // Make some moves
+    await playMove(tester, 'e2', 'e4');
+    await playMove(tester, 'e7', 'e5');
+    await playMove(tester, 'f2', 'f4');
+
+    // Verify we made the moves
+    expect(find.textContaining('f4'), findsOneWidget);
+    expect(find.byKey(const ValueKey('f4-whitepawn')), findsOneWidget);
+
+    // Navigate back to More tab
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Verify we're back at More tab
+    expect(find.text('Tools'), findsOneWidget);
+
+    // Navigate to board editor
+    await tester.tap(find.text('Board editor'));
+    await tester.pumpAndSettle();
+
+    //make moves that result in a different position than the previous analysis
+    await dragFromTo(tester, 'd2', 'd4');
+    await dragFromTo(tester, 'd7', 'd5');
+
+    //Open analysis from editor
+    expect(find.byTooltip('Analysis board'), findsOneWidget);
+    await tester.tap(find.byTooltip('Analysis board'));
+    await tester.pumpAndSettle();
+
+    // Verify board state is correct and previous analysis was overwritten
+    expect(find.byKey(const ValueKey('d4-whitepawn')), findsOneWidget);
+    expect(find.byKey(const ValueKey('d5-blackpawn')), findsOneWidget);
+    expect(find.byKey(const ValueKey('f4-whitepawn')), findsNothing);
+  });
 
   group('conditional premoves', () {
     testWidgets('no conditional premove tab for standalone analysis', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
         home: AnalysisScreen(
-          options: AnalysisOptions.standalone(
+          options: AnalysisOptions.pgn(
+            id: const StringId('standalone'),
             orientation: Side.white,
             pgn: sanMoves,
             isComputerAnalysisAllowed: false,
@@ -965,7 +1557,6 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await tester.pump();
 
       await switchToPremoveTab(tester);
 
@@ -1057,7 +1648,6 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await tester.pump();
 
       await switchToPremoveTab(tester);
 
@@ -1201,7 +1791,6 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await tester.pump();
 
       await switchToPremoveTab(tester);
 
@@ -1270,7 +1859,6 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await tester.pump();
 
       await switchToPremoveTab(tester);
 
@@ -1388,4 +1976,21 @@ String makeCorrespondenceGameJsonWithForecast({
   }
 }
 ''';
+}
+
+Future<void> dragFromTo(WidgetTester tester, String from, String to) async {
+  final fromOffset = squareOffset(tester, Square.fromName(from));
+  await tester.dragFrom(fromOffset, squareOffset(tester, Square.fromName(to)) - fromOffset);
+  await tester.pumpAndSettle();
+}
+
+Offset squareOffset(WidgetTester tester, Square square) {
+  final editor = find.byType(ChessboardEditor);
+  final squareSize = tester.getSize(editor).width / 8;
+
+  return tester.getTopLeft(editor) +
+      Offset(
+        square.file.value * squareSize + squareSize / 2,
+        (7 - square.rank.value) * squareSize + squareSize / 2,
+      );
 }

@@ -2,18 +2,19 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lichess_mobile/src/constants.dart';
 import 'package:lichess_mobile/src/model/analysis/analysis_controller.dart';
+import 'package:lichess_mobile/src/model/analysis/analysis_player.dart';
 import 'package:lichess_mobile/src/model/analysis/analysis_preferences.dart';
 import 'package:lichess_mobile/src/model/analysis/opening_service.dart';
 import 'package:lichess_mobile/src/model/auth/auth_controller.dart';
 import 'package:lichess_mobile/src/model/common/chess.dart';
 import 'package:lichess_mobile/src/model/engine/evaluation_preferences.dart';
-import 'package:lichess_mobile/src/model/engine/evaluation_service.dart';
 import 'package:lichess_mobile/src/model/game/player.dart';
 import 'package:lichess_mobile/src/model/settings/general_preferences.dart';
+import 'package:lichess_mobile/src/styles/styles.dart';
 import 'package:lichess_mobile/src/utils/duration.dart';
 import 'package:lichess_mobile/src/utils/focus_detector.dart';
+import 'package:lichess_mobile/src/utils/immersive_mode.dart';
 import 'package:lichess_mobile/src/utils/l10n_context.dart';
 import 'package:lichess_mobile/src/utils/navigation.dart';
 import 'package:lichess_mobile/src/utils/share.dart';
@@ -31,22 +32,34 @@ import 'package:lichess_mobile/src/view/engine/engine_gauge.dart';
 import 'package:lichess_mobile/src/view/engine/engine_lines.dart';
 import 'package:lichess_mobile/src/view/explorer/explorer_view.dart';
 import 'package:lichess_mobile/src/view/game/game_common_widgets.dart';
+import 'package:lichess_mobile/src/view/offline_computer/offline_computer_game_screen.dart';
+import 'package:lichess_mobile/src/view/over_the_board/over_the_board_screen.dart';
 import 'package:lichess_mobile/src/view/settings/toggle_sound_button.dart';
 import 'package:lichess_mobile/src/view/user/user_or_profile_screen.dart';
 import 'package:lichess_mobile/src/widgets/adaptive_action_sheet.dart';
+import 'package:lichess_mobile/src/widgets/adaptive_choice_picker.dart';
 import 'package:lichess_mobile/src/widgets/bottom_bar.dart';
 import 'package:lichess_mobile/src/widgets/buttons.dart';
 import 'package:lichess_mobile/src/widgets/feedback.dart';
-import 'package:lichess_mobile/src/widgets/misc.dart';
 import 'package:lichess_mobile/src/widgets/platform_context_menu_button.dart';
 import 'package:lichess_mobile/src/widgets/user.dart';
+import 'package:lichess_mobile/src/widgets/variant_app_bar_title.dart';
 import 'package:logging/logging.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+extension _AnalysisGameResultColor on AnalysisGameResult {
+  Color? colorFor(Side side, BuildContext context) => switch (this) {
+    AnalysisGameResult.whiteWins =>
+      side == Side.white ? context.lichessColors.good : context.lichessColors.error,
+    AnalysisGameResult.blackWins =>
+      side == Side.white ? context.lichessColors.error : context.lichessColors.good,
+    _ => null,
+  };
+}
 
 final _logger = Logger('AnalysisScreen');
 
-class AnalysisScreen extends ConsumerWidget {
+class AnalysisScreen extends StatelessWidget {
   const AnalysisScreen({required this.options, super.key});
 
   final AnalysisOptions options;
@@ -56,83 +69,8 @@ class AnalysisScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final analysisState = ref.watch(analysisControllerProvider(options));
-
-    return analysisState.when(
-      data: (state) => _AnalysisScreen(options: options),
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator.adaptive())),
-      error: (error, _) {
-        debugPrint('Error loading analysis: $error');
-        if (error is UnsupportedVariantException) {
-          return _UnsupportedVariantErrorScreen(error: error);
-        }
-        return Scaffold(
-          appBar: AppBar(title: Text(context.l10n.analysis)),
-          body: FullScreenRetryRequest(
-            onRetry: () {
-              ref.invalidate(analysisControllerProvider(options));
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _UnsupportedVariantErrorScreen extends StatelessWidget {
-  const _UnsupportedVariantErrorScreen({required this.error});
-
-  final UnsupportedVariantException error;
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.analysis)),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              context.l10n.mobileSomethingWentWrong,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              context.l10n.mobileUnsupportedVariant(error.variant.name),
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(context.l10n.cancel),
-                ),
-                Flexible(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      final gameUrl = 'https://$kLichessHost/${error.gameId.value}';
-                      await launchUrl(Uri.parse(gameUrl), mode: LaunchMode.externalApplication);
-                    },
-                    icon: const Icon(Icons.open_in_browser),
-                    label: const Text('Open game in your browser'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+    return _AnalysisScreen(options: options);
   }
 }
 
@@ -184,14 +122,16 @@ class _AnalysisScreenState extends ConsumerState<_AnalysisScreen>
 
     switch (asyncState) {
       case AsyncData(:final value):
-        return Scaffold(
-          resizeToAvoidBottomInset: false,
-          appBar: AppBar(
-            centerTitle: false,
-            title: _Title(variant: value.variant),
-            actions: appBarActions,
+        return WakelockWidget(
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            appBar: AppBar(
+              centerTitle: false,
+              title: VariantAppBarTitle(variant: value.variant, title: context.l10n.analysis),
+              actions: appBarActions,
+            ),
+            body: _Body(options: widget.options, controller: _tabController),
           ),
-          body: _Body(options: widget.options, controller: _tabController),
         );
       case AsyncError(:final error, :final stackTrace):
         _logger.severe('Cannot load analysis: $error', stackTrace);
@@ -201,7 +141,7 @@ class _AnalysisScreenState extends ConsumerState<_AnalysisScreen>
           resizeToAvoidBottomInset: false,
           appBar: AppBar(
             centerTitle: false,
-            title: const _Title(variant: Variant.standard),
+            title: VariantAppBarTitle(variant: Variant.standard, title: context.l10n.analysis),
             actions: appBarActions,
           ),
           body: const Center(child: CircularProgressIndicator.adaptive()),
@@ -269,25 +209,6 @@ class _AnalysisMenu extends ConsumerWidget {
   }
 }
 
-class _Title extends StatelessWidget {
-  const _Title({required this.variant});
-
-  final Variant variant;
-
-  static const excludedIcons = [Variant.standard, Variant.fromPosition];
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (!excludedIcons.contains(variant)) ...[Icon(variant.icon), const SizedBox(width: 5.0)],
-        Flexible(child: AppBarTitleText(context.l10n.analysis)),
-      ],
-    );
-  }
-}
-
 class _Body extends ConsumerWidget {
   const _Body({required this.options, required this.controller});
 
@@ -334,13 +255,41 @@ class _Body extends ConsumerWidget {
         clock: footerClock,
         isSideToMove: analysisState.currentPosition.turn == pov,
         result: result?.resultToString(pov),
+        resultColor: result?.colorFor(pov, context),
       );
       boardHeader = _PlayerWidget(
         player: headerPlayer,
         clock: headerClock,
         isSideToMove: analysisState.currentPosition.turn == pov.opposite,
         result: result?.resultToString(pov.opposite),
+        resultColor: result?.colorFor(pov.opposite, context),
       );
+    } else if (options case Pgn()) {
+      // PGN analysis - try to get player info from PGN headers
+      final footerPlayer = analysisState.playerFromPgnHeaders(pov);
+      final headerPlayer = analysisState.playerFromPgnHeaders(pov.opposite);
+
+      if (footerPlayer != null || headerPlayer != null) {
+        final resultString = analysisState.pgnHeaders.get('Result');
+        final result = resultString != null
+            ? AnalysisGameResult.resultFromPgnResult(resultString)
+            : null;
+
+        boardFooter = footerPlayer != null
+            ? _AnalysisPlayerWidget(
+                player: footerPlayer,
+                result: result?.resultToString(pov),
+                resultColor: result?.colorFor(pov, context),
+              )
+            : null;
+        boardHeader = headerPlayer != null
+            ? _AnalysisPlayerWidget(
+                player: headerPlayer,
+                result: result?.resultToString(pov.opposite),
+                resultColor: result?.colorFor(pov.opposite, context),
+              )
+            : null;
+      }
     }
 
     return FocusDetector(
@@ -352,6 +301,7 @@ class _Body extends ConsumerWidget {
       child: AnalysisLayout(
         tabController: controller,
         pov: pov,
+        sideToMove: analysisState.currentPosition.turn,
         boardBuilder: (context, boardSize, borderRadius) =>
             GameAnalysisBoard(options: options, boardSize: boardSize, boardRadius: borderRadius),
         boardHeader: boardHeader,
@@ -363,12 +313,13 @@ class _Body extends ConsumerWidget {
             : null,
         engineLines: isEngineAvailable && numEvalLines > 0 && analysisPrefs.showEngineLines
             ? EngineLines(
+                filters: (id: analysisState.evaluationContext.id, path: analysisState.currentPath),
                 onTapMove: ref.read(ctrlProvider.notifier).onUserMove,
-                savedEval: currentNode.eval,
-                isGameOver: currentNode.position.isGameOver,
+                analyisState: analysisState,
               )
             : null,
         bottomBar: _BottomBar(options: options),
+        pockets: analysisState.currentPosition.pockets,
         children: [
           ExplorerView(
             pov: pov,
@@ -400,11 +351,13 @@ class _PlayerWidget extends StatelessWidget {
     required this.clock,
     required this.isSideToMove,
     this.result,
+    this.resultColor,
   });
 
   final Player player;
   final Duration? clock;
   final String? result;
+  final Color? resultColor;
   final bool isSideToMove;
 
   @override
@@ -415,7 +368,10 @@ class _PlayerWidget extends StatelessWidget {
       child: Row(
         children: [
           if (result != null) ...[
-            Text(result!, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              result!,
+              style: TextStyle(fontWeight: FontWeight.bold, color: resultColor),
+            ),
             const SizedBox(width: 16.0),
           ],
           if (player.user != null)
@@ -455,7 +411,7 @@ class _Clock extends StatelessWidget {
       color: isSideToMove ? colorScheme.secondaryContainer : null,
       child: Center(
         child: Text(
-          timeLeft.toHoursMinutesSeconds(),
+          timeLeft.toHoursMinutesSeconds(showTenths: timeLeft < const Duration(minutes: 1)),
           style: TextStyle(
             color: isSideToMove ? colorScheme.onSecondaryContainer : null,
             fontFeatures: const [FontFeature.tabularFigures()],
@@ -493,6 +449,10 @@ class _BottomBar extends ConsumerWidget {
                 future: toggleFuture,
                 builder: (context, snapshot) {
                   return EngineButton(
+                    filters: (
+                      id: analysisState.evaluationContext.id,
+                      path: analysisState.currentPath,
+                    ),
                     savedEval: analysisState.currentNode.eval,
                     onTap:
                         analysisState.isEngineAllowed &&
@@ -553,18 +513,49 @@ class _BottomBar extends ConsumerWidget {
     return showAdaptiveActionSheet(
       context: context,
       actions: [
-        if (options case Standalone())
+        if (options case Standalone()) ...[
           BottomSheetAction(
             makeLabel: (context) => Text(context.l10n.clearSavedMoves),
             onPressed: () => ref
                 .read(analysisControllerProvider(options).notifier)
                 .clearSavedStandaloneAnalysis(),
           ),
-        if (analysisState.isEngineAvailable(evalPrefs))
+          // Only allow changing the variant if this is standalone analysis entered from the home screen,
+          // but not for any other case like puzzle analysis or an active correspondence game.
+          BottomSheetAction(
+            makeLabel: (context) => Text(context.l10n.variant),
+            onPressed: () => showChoicePicker<Variant>(
+              context,
+              choices: readSupportedVariants
+                  .where(
+                    (variant) => variant != Variant.fromPosition && variant != Variant.chess960,
+                  )
+                  .toList(),
+              selectedItem: analysisState.variant,
+              labelBuilder: (variant) => VariantLabel(variant),
+              onSelectedItemChanged: (Variant variant) =>
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ref
+                        .read(analysisControllerProvider(options).notifier)
+                        .clearSavedStandaloneAnalysis();
+                    Navigator.of(context, rootNavigator: true).pushReplacement(
+                      buildScreenRoute<dynamic>(
+                        context,
+                        screen: AnalysisScreen(
+                          options: (options as Standalone).copyWith(variant: variant),
+                        ),
+                        transitionDuration: Duration.zero,
+                      ),
+                    );
+                  }),
+            ),
+          ),
+        ],
+        if (analysisState.isEngineAvailable(evalPrefs) && analysisState.canShowThreat)
           BottomSheetAction(
             makeLabel: (context) => Text(
               analysisState.engineInThreatMode
-                  ? 'Stop showing threat' // TODO l10n
+                  ? context.l10n.mobileStopShowingThreat
                   : context.l10n.showThreat,
             ),
             onPressed: () =>
@@ -575,8 +566,7 @@ class _BottomBar extends ConsumerWidget {
           onPressed: () => ref.read(analysisControllerProvider(options).notifier).toggleBoard(),
         ),
         if (options case ArchivedGame())
-          if (analysisState.isComputerAnalysisAllowed &&
-              engineSupportedVariants.contains(analysisState.variant))
+          if (analysisState.isComputerAnalysisAllowed)
             if (mySide != null)
               BottomSheetAction(
                 makeLabel: (context) => Text(context.l10n.learnFromYourMistakes),
@@ -607,10 +597,18 @@ class _BottomBar extends ConsumerWidget {
             makeLabel: (context) => Text(context.l10n.boardEditor),
             onPressed: () {
               final boardFen = analysisState.currentPosition.fen;
-              Navigator.of(
-                context,
-              ).push(BoardEditorScreen.buildRoute(context, initialFen: boardFen));
+              Navigator.of(context).push(
+                BoardEditorScreen.buildRoute(context, (
+                  initialVariant: analysisState.variant,
+                  initialFen: boardFen,
+                )),
+              );
             },
+          ),
+        if (analysisState.isComputerAnalysisAllowed)
+          BottomSheetAction(
+            makeLabel: (context) => Text(context.l10n.continueFromHere),
+            onPressed: () => _showContinueFromHereMenu(context, ref),
           ),
         if (analysisState.gameId != null || analysisState.isComputerAnalysisAllowed)
           BottomSheetAction(
@@ -644,6 +642,91 @@ class _BottomBar extends ConsumerWidget {
             },
           ),
       ],
+    );
+  }
+
+  Future<void> _showContinueFromHereMenu(BuildContext context, WidgetRef ref) {
+    final analysisState = ref.read(analysisControllerProvider(options)).requireValue;
+    final boardFen = analysisState.currentPosition.fen;
+    return showAdaptiveActionSheet(
+      context: context,
+      actions: [
+        BottomSheetAction(
+          makeLabel: (context) => Text(context.l10n.playAgainstComputer),
+          onPressed: () => Navigator.of(context).push(
+            OfflineComputerGameScreen.buildRoute(
+              context,
+              initialVariant: analysisState.variant,
+              initialFen: boardFen,
+            ),
+          ),
+        ),
+        BottomSheetAction(
+          makeLabel: (context) => Text(context.l10n.mobileOverTheBoard),
+          onPressed: () => Navigator.of(context).push(
+            OverTheBoardScreen.buildRoute(
+              context,
+              initialVariant: analysisState.variant,
+              initialFen: boardFen,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Player widget for PGN imports, displaying analysis player info
+class _AnalysisPlayerWidget extends StatelessWidget {
+  const _AnalysisPlayerWidget({required this.player, this.result, this.resultColor});
+
+  final AnalysisPlayer player;
+  final String? result;
+  final Color? resultColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: kAnalysisBoardHeaderOrFooterHeight,
+      padding: const EdgeInsets.only(left: 8.0),
+      child: Row(
+        children: [
+          if (result != null) ...[
+            Text(
+              result!,
+              style: TextStyle(fontWeight: .bold, color: resultColor),
+            ),
+            const SizedBox(width: 16.0),
+          ],
+          if (player.title != null) ...[
+            Text(
+              player.title!,
+              style: TextStyle(
+                color: (player.title == 'BOT')
+                    ? context.lichessColors.fancy
+                    : context.lichessColors.brag,
+                fontWeight: .bold,
+              ),
+            ),
+            const SizedBox(width: 5),
+          ],
+          Flexible(
+            child: Text(
+              player.name,
+              style: const TextStyle(fontWeight: .bold),
+              overflow: .ellipsis,
+            ),
+          ),
+          if (player.rating != null) ...[
+            const SizedBox(width: 5),
+            Text(
+              player.rating.toString(),
+              overflow: .ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w400, color: textShade(context, 0.8)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

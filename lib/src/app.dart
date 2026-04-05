@@ -1,15 +1,19 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:l10n_esperanto/l10n_esperanto.dart';
 import 'package:lichess_mobile/l10n/l10n.dart';
-import 'package:lichess_mobile/src/app_links.dart';
-import 'package:lichess_mobile/src/log.dart';
+import 'package:lichess_mobile/src/app_links_service.dart';
 import 'package:lichess_mobile/src/model/account/account_service.dart';
 import 'package:lichess_mobile/src/model/account/ongoing_game.dart';
+import 'package:lichess_mobile/src/model/announce/announce_service.dart';
 import 'package:lichess_mobile/src/model/challenge/challenge_service.dart';
 import 'package:lichess_mobile/src/model/common/preloaded_data.dart';
 import 'package:lichess_mobile/src/model/correspondence/correspondence_service.dart';
+import 'package:lichess_mobile/src/model/log/app_log_service.dart';
 import 'package:lichess_mobile/src/model/message/message_service.dart';
 import 'package:lichess_mobile/src/model/notifications/notification_service.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
@@ -19,8 +23,9 @@ import 'package:lichess_mobile/src/network/socket.dart';
 import 'package:lichess_mobile/src/quick_actions.dart';
 import 'package:lichess_mobile/src/tab_scaffold.dart';
 import 'package:lichess_mobile/src/theme.dart';
-import 'package:lichess_mobile/src/utils/navigation.dart';
 import 'package:lichess_mobile/src/utils/screen.dart';
+import 'package:lichess_mobile/src/view/more/import_pgn_screen.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 /// Application initialization and main entry point.
 class AppInitializationScreen extends ConsumerWidget {
@@ -61,6 +66,9 @@ class Application extends ConsumerStatefulWidget {
 class _AppState extends ConsumerState<Application> {
   /// Whether the app has checked for online status for the first time.
   bool _firstTimeOnlineCheck = false;
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
+  StreamSubscription<List<SharedMediaFile>>? _intentSub;
 
   @override
   void initState() {
@@ -72,6 +80,8 @@ class _AppState extends ConsumerState<Application> {
     ref.read(accountServiceProvider).start();
     ref.read(correspondenceServiceProvider).start();
     ref.read(quickActionServiceProvider).start();
+    ref.read(announceServiceProvider).start();
+    ref.read(appLinksServiceProvider).start();
 
     // Listen for connectivity changes and perform actions accordingly.
     ref.listenManual(connectivityChangesProvider, (prev, current) async {
@@ -103,6 +113,13 @@ class _AppState extends ConsumerState<Application> {
     });
 
     super.initState();
+    _initSharingIntent();
+  }
+
+  @override
+  void dispose() {
+    _intentSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -114,6 +131,7 @@ class _AppState extends ConsumerState<Application> {
     final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       localizationsDelegates: const [
         ...AppLocalizations.localizationsDelegates,
         MaterialLocalizationsEo.delegate,
@@ -129,16 +147,41 @@ class _AppState extends ConsumerState<Application> {
                 context,
               ).copyWith(height: isShortVerticalScreen(context) ? 60 : null),
       ),
-      onGenerateRoute: (settings) =>
-          settings.name != null ? resolveAppLinkUri(context, Uri.parse(settings.name!)) : null,
-      onGenerateInitialRoutes: (initialRoute) {
-        final homeRoute = buildScreenRoute<void>(context, screen: const MainTabScaffold());
-        return <Route<dynamic>?>[
-          homeRoute,
-          resolveAppLinkUri(context, Uri.parse(initialRoute)),
-        ].nonNulls.toList(growable: false);
-      },
+      home: const MainTabScaffold(),
       navigatorObservers: [rootNavPageRouteObserver],
     );
+  }
+
+  void _initSharingIntent() {
+    // Warm start
+    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((
+      List<SharedMediaFile> value,
+    ) {
+      _processSharedFiles(value);
+    });
+
+    // Cold start
+    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
+      _processSharedFiles(value);
+      ReceiveSharingIntent.instance.reset();
+    });
+  }
+
+  Future<void> _processSharedFiles(List<SharedMediaFile> files) async {
+    if (files.isEmpty) return;
+    final filePath = files.first.path;
+    try {
+      final context = _navigatorKey.currentContext;
+      if (context == null || !context.mounted) return;
+
+      final file = File(filePath);
+      final pgnText = await file.readAsString();
+
+      if (context.mounted) {
+        ImportPgnScreen.handlePgnText(context, pgnText);
+      }
+    } catch (e) {
+      debugPrint('Failed to process incoming file: $e');
+    }
   }
 }

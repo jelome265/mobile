@@ -11,9 +11,11 @@ import 'package:lichess_mobile/src/model/common/service/sound_service.dart';
 import 'package:lichess_mobile/src/model/correspondence/correspondence_game_storage.dart';
 import 'package:lichess_mobile/src/model/correspondence/offline_correspondence_game.dart';
 import 'package:lichess_mobile/src/model/game/game.dart';
+import 'package:lichess_mobile/src/model/game/game_board_params.dart';
 import 'package:lichess_mobile/src/model/game/game_status.dart';
 import 'package:lichess_mobile/src/model/game/material_diff.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
+import 'package:lichess_mobile/src/utils/chessboard.dart';
 import 'package:lichess_mobile/src/utils/l10n_context.dart';
 import 'package:lichess_mobile/src/utils/navigation.dart';
 import 'package:lichess_mobile/src/view/analysis/analysis_screen.dart';
@@ -183,9 +185,16 @@ class _BodyState extends ConsumerState<_Body> {
         Expanded(
           child: SafeArea(
             child: GameLayout(
-              orientation: isBoardTurned ? youAre!.opposite : youAre!,
-              lastMove: game.moveAt(stepCursor) as NormalMove?,
-              interactiveBoardParams: (
+              orientation: variantBoardOrientation(
+                variant: game.meta.variant,
+                youAre: youAre!,
+                isBoardTurned: isBoardTurned,
+              ),
+              lastMove: game.moveAt(stepCursor),
+              explosionSquares: stepCursor > 0
+                  ? atomicExplosionSquares(game.positionAt(stepCursor - 1), game.moveAt(stepCursor))
+                  : null,
+              boardParams: GameBoardParams.interactive(
                 variant: game.meta.variant,
                 position: position,
                 playerSide: game.playable && !isReplaying
@@ -194,7 +203,7 @@ class _BodyState extends ConsumerState<_Body> {
                           : PlayerSide.black
                     : PlayerSide.none,
                 promotionMove: promotionMove,
-                onMove: (move, {isDrop}) {
+                onMove: (move, {viaDragAndDrop}) {
                   onUserMove(move);
                 },
                 onPromotionSelection: onPromotionSelection,
@@ -224,7 +233,8 @@ class _BodyState extends ConsumerState<_Body> {
                       Navigator.of(context).push(
                         AnalysisScreen.buildRoute(
                           context,
-                          AnalysisOptions.standalone(
+                          AnalysisOptions.pgn(
+                            id: game.id,
                             orientation: game.youAre!,
                             pgn: game.makePgn(),
                             isComputerAnalysisAllowed: false,
@@ -318,8 +328,8 @@ class _BodyState extends ConsumerState<_Body> {
     }
   }
 
-  void onUserMove(NormalMove move) {
-    if (isPromotionPawnMove(game.lastPosition, move)) {
+  void onUserMove(Move move) {
+    if (move case NormalMove() when isPromotionPawnMove(game.lastPosition, move)) {
       setState(() {
         promotionMove = move;
       });
@@ -331,7 +341,7 @@ class _BodyState extends ConsumerState<_Body> {
     final newStep = GameStep(
       position: newPos,
       sanMove: sanMove,
-      diff: MaterialDiff.fromBoard(newPos.board),
+      diff: MaterialDiff.fromPosition(newPos),
     );
 
     setState(() {
@@ -410,7 +420,7 @@ class _BodyState extends ConsumerState<_Body> {
   void _moveFeedback(SanMove sanMove) {
     final isCheck = sanMove.san.contains('+');
     if (sanMove.san.contains('x')) {
-      ref.read(moveFeedbackServiceProvider).captureFeedback(check: isCheck);
+      ref.read(moveFeedbackServiceProvider).captureFeedback(game.variant, check: isCheck);
     } else {
       ref.read(moveFeedbackServiceProvider).moveFeedback(check: isCheck);
     }

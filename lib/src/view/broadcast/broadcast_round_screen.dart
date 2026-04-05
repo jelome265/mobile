@@ -189,7 +189,7 @@ class _BroadcastRoundScreenState extends ConsumerState<BroadcastRoundScreen>
     AsyncValue<BroadcastRoundState> asyncRound,
   ) {
     return switch (asyncRound) {
-      AsyncData(value: final _) => PlatformScaffold(
+      AsyncData(value: final roundState) => PlatformScaffold(
         extendBody: Theme.of(context).platform == TargetPlatform.iOS,
         appBar: PlatformAppBar(
           title: AppBarTitleText(widget.broadcast.title, maxLines: 2),
@@ -218,7 +218,8 @@ class _BroadcastRoundScreenState extends ConsumerState<BroadcastRoundScreen>
             SemanticIconButton(
               icon: const PlatformShareIcon(),
               semanticsLabel: context.l10n.studyShareAndExport,
-              onPressed: () => showBroadcastShareMenu(context, widget.broadcast),
+              onPressed: () =>
+                  showBroadcastShareMenu(context, widget.broadcast.tour, roundState.round),
             ),
           ],
         ),
@@ -566,7 +567,7 @@ class _BroadcastSettingsBottomSheetState extends ConsumerState<_BroadcastSetting
           children: [
             SwitchSettingTile(
               title: Text(context.l10n.evaluationGauge),
-              value: broadcastPreferences.showEvaluationBar,
+              value: broadcastPreferences.showRoundEvaluationGauges,
               onChanged: (value) {
                 ref.read(broadcastPreferencesProvider.notifier).toggleEvaluationBar();
               },

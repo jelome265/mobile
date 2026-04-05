@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:lichess_mobile/src/model/broadcast/broadcast.dart';
 import 'package:lichess_mobile/src/model/broadcast/broadcast_preferences.dart';
 import 'package:lichess_mobile/src/model/broadcast/broadcast_providers.dart';
@@ -66,8 +67,8 @@ class BroadcastTeamsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final round = ref.watch(broadcastRoundControllerProvider(roundId));
-    final showEvaluationBar = ref.watch(
-      broadcastPreferencesProvider.select((value) => value.showEvaluationBar),
+    final showEvaluationGauges = ref.watch(
+      broadcastPreferencesProvider.select((value) => value.showRoundEvaluationGauges),
     );
 
     return switch (round) {
@@ -83,7 +84,8 @@ class BroadcastTeamsList extends ConsumerWidget {
             tournamentSlug: tournamentSlug,
             roundSlug: value.round.slug,
             title: value.round.name,
-            showEvaluationBar: showEvaluationBar,
+            showEvaluationGauge: showEvaluationGauges,
+            customScoring: value.round.customScoring,
           );
         },
       ),
@@ -102,7 +104,8 @@ class _TeamMatchCard extends StatelessWidget {
     required this.tournamentSlug,
     required this.roundSlug,
     required this.title,
-    required this.showEvaluationBar,
+    required this.showEvaluationGauge,
+    required this.customScoring,
   });
 
   final BroadcastTeamMatch match;
@@ -112,7 +115,17 @@ class _TeamMatchCard extends StatelessWidget {
   final String tournamentSlug;
   final String roundSlug;
   final String title;
-  final bool showEvaluationBar;
+  final bool showEvaluationGauge;
+  final BroadcastCustomScoring? customScoring;
+
+  bool get matchFinished => games.everyEntry((e) => e.value.isOver);
+  BroadcastResult? get matchStatus => matchFinished
+      ? match.team1.points > match.team2.points
+            ? BroadcastResult.whiteWins
+            : match.team1.points < match.team2.points
+            ? BroadcastResult.blackWins
+            : BroadcastResult.draw
+      : null;
 
   @override
   Widget build(BuildContext context) {
@@ -139,9 +152,25 @@ class _TeamMatchCard extends StatelessWidget {
                   Container(
                     width: _kScoreContainerWidth,
                     alignment: Alignment.center,
-                    child: Text(
-                      '${match.team1.points % 1 == 0 ? match.team1.points.toInt() : match.team1.points} - ${match.team2.points % 1 == 0 ? match.team2.points.toInt() : match.team2.points}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          NumberFormat('#.#').format(match.team1.points),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: matchStatus?.colorFor(Side.white, context),
+                          ),
+                        ),
+                        const Text(' - '),
+                        Text(
+                          NumberFormat('#.#').format(match.team2.points),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: matchStatus?.colorFor(Side.black, context),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Expanded(
@@ -172,7 +201,8 @@ class _TeamMatchCard extends StatelessWidget {
               tournamentSlug: tournamentSlug,
               roundSlug: roundSlug,
               title: title,
-              showEvaluationBar: showEvaluationBar,
+              showEvaluationGauge: showEvaluationGauge,
+              customScoring: customScoring,
             );
           }),
         ],
@@ -191,7 +221,8 @@ class _GameRow extends ConsumerStatefulWidget {
     required this.tournamentSlug,
     required this.roundSlug,
     required this.title,
-    required this.showEvaluationBar,
+    required this.showEvaluationGauge,
+    required this.customScoring,
   });
 
   final BroadcastGame game;
@@ -202,7 +233,8 @@ class _GameRow extends ConsumerStatefulWidget {
   final String tournamentSlug;
   final String roundSlug;
   final String title;
-  final bool showEvaluationBar;
+  final bool showEvaluationGauge;
+  final BroadcastCustomScoring? customScoring;
   @override
   ConsumerState<_GameRow> createState() => _GameRowState();
 }
@@ -223,7 +255,7 @@ class _GameRowState extends ConsumerState<_GameRow> {
     final team1Player = widget.teamGame.pov == Side.white ? whitePlayer : blackPlayer;
     final team2Player = widget.teamGame.pov == Side.white ? blackPlayer : whitePlayer;
 
-    final resultString = _getGameResult(widget.game, widget.teamGame.pov);
+    final result = _getGameResultTexts(widget.game, widget.teamGame.pov, widget.customScoring);
 
     final whiteWinningChances =
         widget.game.isOngoing && (widget.game.cp != null || widget.game.mate != null)
@@ -279,7 +311,7 @@ class _GameRowState extends ConsumerState<_GameRow> {
                 SizedBox(width: isTablet ? _kTabletSpacing : _kPhoneSpacing),
                 SizedBox(
                   width: _kEvalBarWidth,
-                  child: widget.game.isOngoing && widget.showEvaluationBar
+                  child: widget.game.isOngoing && widget.showEvaluationGauge
                       ? whiteWinningChances != null
                             ? _MiniEvalBar(
                                 whiteWinningChances: whiteWinningChances,
@@ -293,7 +325,10 @@ class _GameRowState extends ConsumerState<_GameRow> {
                                   color: Colors.grey.withValues(alpha: 0.6),
                                 ),
                               )
-                      : Container(alignment: Alignment.center, child: Text(resultString)),
+                      : Container(
+                          alignment: Alignment.center,
+                          child: Row(mainAxisAlignment: .center, children: result),
+                        ),
                 ),
                 SizedBox(width: isTablet ? _kTabletSpacing : _kPhoneSpacing),
                 Expanded(
@@ -307,14 +342,24 @@ class _GameRowState extends ConsumerState<_GameRow> {
     );
   }
 
-  String _getGameResult(BroadcastGame game, Side teamPov) {
+  List<Text> _getGameResultTexts(
+    BroadcastGame game,
+    Side teamPov,
+    BroadcastCustomScoring? customScoring,
+  ) {
     if (!game.isOver) {
-      return '*';
+      return [const Text('*')];
+    }
+    Text povResult(BroadcastGame game, Side pov, BroadcastCustomScoring? customScoring) {
+      return Text(
+        resultString(customScoring, pov, game.status),
+        style: TextStyle(color: game.status.colorFor(pov, context)),
+      );
     }
 
-    final team1Result = game.status.resultToString(teamPov);
-    final team2Result = game.status.resultToString(teamPov.opposite);
-    return '$team1Result-$team2Result';
+    final team1Result = povResult(game, teamPov, customScoring);
+    final team2Result = povResult(game, teamPov.opposite, customScoring);
+    return [team1Result, const Text('-'), team2Result];
   }
 }
 

@@ -482,7 +482,22 @@ void main() {
       expect(find.text('Team C'), findsOneWidget);
       expect(find.text('Team D'), findsOneWidget);
 
-      expect(find.text('1 - 0'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((widget) {
+          if (widget is Row) {
+            final children = widget.children;
+            return children.length == 3 &&
+                children[0] is Text &&
+                (children[0] as Text).data == '1' &&
+                children[1] is Text &&
+                (children[1] as Text).data == ' - ' &&
+                children[2] is Text &&
+                (children[2] as Text).data == '0';
+          }
+          return false;
+        }),
+        findsOneWidget,
+      );
 
       expect(find.byType(Card), findsNWidgets(2));
     });
@@ -577,6 +592,7 @@ final _finishedBroadcast = Broadcast(
     startsAt: DateTime.fromMillisecondsSinceEpoch(1735687229333),
     finishedAt: DateTime.fromMillisecondsSinceEpoch(1735689805106),
     startsAfterPrevious: true,
+    customScoring: null,
   ),
   roundToLinkId: const BroadcastRoundId('S5VCwuVn'),
   group: 'FIDE World Rapid & Blitz Championships 2024',
@@ -593,7 +609,7 @@ const _finishedTournamentResponse = '''
       "players": "Carlsen, Firouzja, So, Caruana, Murzin",
       "location": "New York, United States",
       "tc": "3 min + 2 sec / move",
-      "fideTc": "blitz",
+      "fideTC": "blitz",
       "timeZone": "America/New_York",
       "standings": "https://worldrapidandblitz2024.fide.com/blitz-finals-open/",
       "format": "8-player knockout"
@@ -823,7 +839,7 @@ const _finishedRoundResponse = '''
       "players": "Carlsen, Firouzja, So, Caruana, Murzin",
       "location": "New York, United States",
       "tc": "3 min + 2 sec / move",
-      "fideTc": "blitz",
+      "fideTC": "blitz",
       "timeZone": "America/New_York",
       "standings": "https://worldrapidandblitz2024.fide.com/blitz-finals-open/",
       "format": "8-player knockout"
@@ -1009,6 +1025,7 @@ final _upcomingBroadcast = Broadcast(
     startsAt: DateTime.fromMillisecondsSinceEpoch(1736526600000),
     finishedAt: null,
     startsAfterPrevious: false,
+    customScoring: null,
   ),
   roundToLinkId: const BroadcastRoundId('UN587WBI'),
   group: null,
@@ -1025,7 +1042,7 @@ const _upcomingTournamentResponse = r'''
       "players": "Xu, Bonelli, Jacobson",
       "location": "Seville, Spain",
       "tc": "90 min + 30 sec / move",
-      "fideTc": "standard",
+      "fideTC": "standard",
       "timeZone": "Europe/Madrid",
       "standings": "https://chess-results.com/tnr1001542.aspx?lan=1",
       "format": "9-round Swiss"
@@ -1136,7 +1153,7 @@ const _upcomingRoundResponse = r'''
       "players": "Xu, Bonelli, Jacobson",
       "location": "Seville, Spain",
       "tc": "90 min + 30 sec / move",
-      "fideTc": "standard",
+      "fideTC": "standard",
       "timeZone": "Europe/Madrid",
       "standings": "https://chess-results.com/tnr1001542.aspx?lan=1",
       "format": "9-round Swiss"
@@ -1183,6 +1200,7 @@ final _liveBroadcast = Broadcast(
     startsAt: null,
     finishedAt: null,
     startsAfterPrevious: false,
+    customScoring: null,
   ),
   roundToLinkId: const BroadcastRoundId('00000000'),
   group: null,
@@ -2164,6 +2182,7 @@ final _liveTeamBroadcast = Broadcast(
     startsAt: null,
     finishedAt: null,
     startsAfterPrevious: false,
+    customScoring: null,
   ),
   roundToLinkId: const BroadcastRoundId('00000000'),
   group: null,

@@ -19,6 +19,7 @@ import 'package:lichess_mobile/src/model/tournament/tournament_controller.dart';
 import 'package:lichess_mobile/src/model/tournament/tournament_providers.dart';
 import 'package:lichess_mobile/src/model/tournament/tournament_repository.dart';
 import 'package:lichess_mobile/src/model/user/user.dart';
+import 'package:lichess_mobile/src/network/http.dart';
 import 'package:lichess_mobile/src/styles/lichess_icons.dart';
 import 'package:lichess_mobile/src/styles/styles.dart';
 import 'package:lichess_mobile/src/tab_scaffold.dart';
@@ -43,6 +44,7 @@ import 'package:lichess_mobile/src/widgets/feedback.dart';
 import 'package:lichess_mobile/src/widgets/misc.dart';
 import 'package:lichess_mobile/src/widgets/network_image.dart';
 import 'package:lichess_mobile/src/widgets/platform.dart';
+import 'package:lichess_mobile/src/widgets/side_indicator.dart';
 import 'package:lichess_mobile/src/widgets/user.dart';
 import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import 'package:share_plus/share_plus.dart';
@@ -680,8 +682,7 @@ class _StandingControls extends ConsumerWidget {
           onLongPress: state.hasPreviousPage
               ? ref.read(tournamentControllerProvider(state.id).notifier).loadFirstStandingsPage
               : null,
-          // TODO l10n
-          semanticsLabel: 'Previous',
+          semanticsLabel: context.l10n.mobilePreviousPage,
           icon: const Icon(Icons.chevron_left),
         ),
         Expanded(
@@ -705,8 +706,7 @@ class _StandingControls extends ConsumerWidget {
           SemanticIconButton(
             onPressed: ref.read(tournamentControllerProvider(state.id).notifier).jumpToMyPage,
             icon: const Icon(Icons.person_pin_circle_outlined),
-            // TODO l10n
-            semanticsLabel: 'Jump to my page',
+            semanticsLabel: context.l10n.mobileTournamentJumpToMyPage,
           ),
       ],
     );
@@ -1150,6 +1150,39 @@ class _BottomBarState extends ConsumerState<_BottomBar> {
                             ref
                                 .read(tournamentControllerProvider(widget.state.id).notifier)
                                 .joinOrPause(teamId: selectedTeamId);
+                          } else if (!widget.state.joined &&
+                              widget.state.tournament.private &&
+                              !widget.state.hasJoined) {
+                            // Joining a private tournament
+                            final entryCode = await _showEntryCodeDialog(context);
+                            if (entryCode == null || entryCode.isEmpty) {
+                              return;
+                            }
+
+                            setState(() {
+                              joinOrLeaveInProgress = true;
+                            });
+
+                            try {
+                              await ref
+                                  .read(tournamentControllerProvider(widget.state.id).notifier)
+                                  .joinOrPause(entryCode: entryCode);
+                            } catch (e) {
+                              setState(() {
+                                joinOrLeaveInProgress = false;
+                              });
+                              if (e is ServerException && e.statusCode == 400) {
+                                // Invalid entry code
+                                if (!context.mounted) return;
+                                showSnackBar(
+                                  context,
+                                  context.l10n.teamIncorrectEntryCode,
+                                  type: SnackBarType.error,
+                                );
+                              } else {
+                                rethrow;
+                              }
+                            }
                           } else {
                             // Normal join/pause flow
                             setState(() {
@@ -1460,7 +1493,7 @@ class _PairingTile extends ConsumerWidget {
               padding: EdgeInsets.only(right: 8.0),
               child: Icon(LichessIcons.body_cut, size: 20),
             ),
-          Icon(pairing.color == Side.white ? Icons.circle_outlined : Icons.circle, size: 20),
+          SideIndicator(side: pairing.color, size: 20),
           SizedBox(
             width: 24,
             height: 24,
@@ -1715,6 +1748,30 @@ Future<TeamId?> _showTeamSelectionDialog(BuildContext context, TeamBattleData te
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(context.l10n.cancel),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<String?> _showEntryCodeDialog(BuildContext context) {
+  final TextEditingController controller = TextEditingController();
+
+  return showDialog<String>(
+    context: context,
+    builder: (context) {
+      return AlertDialog.adaptive(
+        title: Text(context.l10n.tournamentEntryCode),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: Text(context.l10n.join),
           ),
         ],
       );

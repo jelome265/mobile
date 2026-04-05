@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:lichess_mobile/src/model/broadcast/broadcast.dart';
 import 'package:lichess_mobile/src/model/broadcast/broadcast_providers.dart';
 import 'package:lichess_mobile/src/model/common/id.dart';
@@ -10,7 +11,10 @@ import 'package:lichess_mobile/src/styles/styles.dart';
 import 'package:lichess_mobile/src/theme.dart';
 import 'package:lichess_mobile/src/utils/l10n_context.dart';
 import 'package:lichess_mobile/src/view/broadcast/broadcast_player_results_screen.dart';
+import 'package:lichess_mobile/src/view/broadcast/broadcast_player_widget.dart';
+import 'package:lichess_mobile/src/widgets/adaptive_bottom_sheet.dart';
 import 'package:lichess_mobile/src/widgets/network_image.dart';
+import 'package:lichess_mobile/src/widgets/platform_search_bar.dart';
 import 'package:lichess_mobile/src/widgets/progression_widget.dart';
 
 final playersAndTournamentProvider = FutureProvider.autoDispose
@@ -68,13 +72,22 @@ class _BroadcastPlayersListState extends ConsumerState<BroadcastPlayersList> {
   bool reverse = false;
   bool get withRating => players.any((p) => p.player.rating != null);
   bool get withScores => players.any((p) => p.score != null);
+  String _searchQuery = '';
+  late final TextEditingController _searchController;
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     players = widget.players;
     currentSort = withScores ? _SortingTypes.score : _SortingTypes.elo;
     sort();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -151,64 +164,106 @@ class _BroadcastPlayersListState extends ConsumerState<BroadcastPlayersList> {
   Widget build(BuildContext context) {
     final double scoreWidth = max(MediaQuery.sizeOf(context).width * 0.15, 90);
     final sortIcon = (reverse ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down);
+    final withRank = players.any((p) => p.rank != null);
+    final showSearchBar = players.length >= 15;
+    final filteredPlayers = _searchQuery.isEmpty
+        ? players
+        : players
+              .where(
+                (p) => p.player.name?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false,
+              )
+              .toIList();
 
-    return ListView.builder(
-      itemCount: players.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Column(
-            mainAxisSize: .min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Row(
+    final mediaQueryPadding = MediaQuery.paddingOf(context);
+
+    return CustomScrollView(
+      slivers: [
+        SliverSafeArea(
+          bottom: false,
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              mainAxisSize: .min,
+              children: [
+                if (showSearchBar)
+                  Padding(
+                    padding: Styles.bodyPadding.copyWith(bottom: 0.0),
+                    child: PlatformSearchBar(
+                      controller: _searchController,
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
+                      onClear: () {
+                        _searchController.clear();
+                        setState(() {
+                          _searchQuery = '';
+                        });
+                      },
+                    ),
+                  ),
+                if (withRank)
+                  Padding(
+                    padding: Styles.bodyPadding.copyWith(top: 8.0, bottom: 0.0),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info, size: 16),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Standings are calculated using broadcasted games and may differ from official results.',
+                            maxLines: 2,
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Row(
+                  crossAxisAlignment: .center,
                   children: [
-                    Icon(Icons.info, size: 16),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Standings are calculated using broadcasted games and may differ from official results.',
-                        maxLines: 2,
-                        style: TextStyle(fontSize: 13),
+                    if (withRating)
+                      Expanded(
+                        child: _TableTitleCell(
+                          title: Text('${context.l10n.player} (Elo)', style: _kHeaderTextStyle),
+                          onTap: () => toggleSort(_SortingTypes.elo),
+                          sortIcon: (currentSort == _SortingTypes.elo) ? sortIcon : null,
+                        ),
+                      ),
+                    SizedBox(
+                      width: scoreWidth,
+                      child: _TableTitleCell(
+                        title: Text(
+                          withScores ? context.l10n.broadcastScore : context.l10n.games,
+                          style: _kHeaderTextStyle,
+                        ),
+                        onTap: () => toggleSort(_SortingTypes.score),
+                        sortIcon: (currentSort == _SortingTypes.score) ? sortIcon : null,
                       ),
                     ),
                   ],
                 ),
-              ),
-              Row(
-                crossAxisAlignment: .center,
-                children: [
-                  if (withRating)
-                    Expanded(
-                      child: _TableTitleCell(
-                        title: Text('${context.l10n.player} (Elo)', style: _kHeaderTextStyle),
-                        onTap: () => toggleSort(_SortingTypes.elo),
-                        sortIcon: (currentSort == _SortingTypes.elo) ? sortIcon : null,
-                      ),
-                    ),
-                  SizedBox(
-                    width: scoreWidth,
-                    child: _TableTitleCell(
-                      title: Text(
-                        withScores ? context.l10n.broadcastScore : context.l10n.games,
-                        style: _kHeaderTextStyle,
-                      ),
-                      onTap: () => toggleSort(_SortingTypes.score),
-                      sortIcon: (currentSort == _SortingTypes.score) ? sortIcon : null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        } else {
-          return BroadcastPlayerRow(
-            playerWithOverallResult: players[index - 1],
-            tournament: widget.tournament,
-            index: index,
-          );
-        }
-      },
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: EdgeInsetsGeometry.only(
+            // top media query padding is already included in the SliverSafeArea above
+            top: 0.0,
+            bottom: mediaQueryPadding.bottom,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              return BroadcastPlayerRow(
+                playerWithOverallResult: filteredPlayers[index],
+                tournament: widget.tournament,
+                index: index + 1,
+              );
+            }, childCount: filteredPlayers.length),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -256,13 +311,71 @@ class BroadcastPlayerRow extends StatelessWidget {
   final BroadcastPlayerWithOverallResult playerWithOverallResult;
   final BroadcastTournament tournament;
   final int index;
+  void _showTieBreaksBottomSheet(BuildContext context) {
+    final tieBreaks = playerWithOverallResult.tieBreaks;
+    if (tieBreaks == null || tieBreaks.isEmpty) return;
+
+    final BroadcastPlayerWithOverallResult(:player, :score, :played) = playerWithOverallResult;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isDismissible: true,
+      isScrollControlled: true,
+      builder: (context) {
+        return BottomSheetScrollableContainer(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: .spaceBetween,
+                children: [
+                  Expanded(
+                    child: BroadcastPlayerWidget(
+                      player: player,
+                      textStyle: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    score != null
+                        ? '${NumberFormat('0.#').format(score)} / $played'
+                        : '$played ${context.l10n.games.toLowerCase()}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text('Tie-breaking', style: Theme.of(context).textTheme.titleSmall),
+            ),
+            ...tieBreaks.map(
+              (tieBreak) => ListTile(
+                title: Text(tieBreak.description),
+                trailing: Text(NumberFormat('0.##').format(tieBreak.points)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final BroadcastPlayerWithOverallResult(:player, :ratingDiff, :score, :played, :rank) =
-        playerWithOverallResult;
-    final BroadcastPlayer(:federation, :title, :name, :rating) = player;
+    final BroadcastPlayerWithOverallResult(
+      :player,
+      :ratingDiffs,
+      :ratingsMap,
+      :score,
+      :played,
+      :rank,
+      :tieBreaks,
+    ) = playerWithOverallResult;
+    final BroadcastPlayer(:federation, :rating) = player;
     final pic = player.fideId != null ? tournament.photos?.get(player.fideId!) : null;
+    final hasTieBreaks = tieBreaks != null && tieBreaks.isNotEmpty;
 
     return ListTile(
       tileColor: index.isEven ? context.lichessTheme.rowEven : context.lichessTheme.rowOdd,
@@ -278,6 +391,7 @@ class BroadcastPlayerRow extends StatelessWidget {
           );
         }
       },
+      onLongPress: hasTieBreaks ? () => _showTieBreaksBottomSheet(context) : null,
       leading: ClipRRect(
         borderRadius: Styles.thumbnailBorderRadius,
         child: pic != null
@@ -289,73 +403,76 @@ class BroadcastPlayerRow extends StatelessWidget {
       title: Row(
         mainAxisSize: .min,
         children: [
-          if (title != null) ...[
+          if (rank != null) ...[
             Text(
-              title,
+              rank.toString(),
               style: TextStyle(
-                color: (title == 'BOT') ? context.lichessColors.fancy : context.lichessColors.brag,
-                fontWeight: FontWeight.bold,
+                color: textShade(context, Styles.subtitleOpacity),
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
             const SizedBox(width: 5),
           ],
-          Flexible(child: Text(name ?? '', overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: BroadcastPlayerWidget(player: player, showRating: false, showFederation: false),
+          ),
         ],
       ),
-      subtitle: federation != null
-          ? Row(
-              mainAxisSize: .min,
-              children: [
-                Image.asset('assets/images/fide-fed/$federation.png', height: 12),
-                const SizedBox(width: 5),
-                if (rating != null)
-                  Text(
-                    rating.toString(),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontFeatures: [FontFeature.tabularFigures()],
+      subtitle: Row(
+        mainAxisSize: .min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (federation != null) Image.asset('assets/images/fide-fed/$federation.png', height: 12),
+          if (ratingsMap != null)
+            Column(
+              mainAxisAlignment: .start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: ratingsMap
+                  .mapTo(
+                    (tc, rating) => Row(
+                      mainAxisAlignment: .start,
+                      spacing: 4.0,
+                      children: [
+                        const SizedBox(width: 4),
+                        if (ratingsMap.length > 1) Icon(tc.icon, size: 14),
+                        Text(
+                          rating.toString(),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if (ratingDiffs != null && ratingDiffs.get(tc) != null)
+                          ProgressionWidget(ratingDiffs.get(tc)!, fontSize: 13),
+                      ],
                     ),
-                  ),
-                const SizedBox(width: 4),
-                if (ratingDiff != null) ProgressionWidget(ratingDiff, fontSize: 13),
-              ],
-            )
-          : null,
+                  )
+                  .toList(),
+            ),
+        ],
+      ),
       trailing: rating != null || score != null
           ? SizedBox(
-              width: 65,
-              child: Column(
-                mainAxisSize: .min,
-                crossAxisAlignment: .end,
-                children: [
-                  if (score != null)
-                    Text(
-                      score.toStringAsFixed((score == score.roundToDouble()) ? 0 : 1),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        fontFeatures: [FontFeature.tabularFigures()],
+              width: 35,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: score != null
+                    ? Text(
+                        score.toStringAsFixed((score == score.roundToDouble()) ? 0 : 1),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      )
+                    : Text(
+                        played.toString(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
                       ),
-                    )
-                  else
-                    Text(
-                      played.toString(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  if (rank != null)
-                    Text(
-                      '#$rank',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: textShade(context, Styles.subtitleOpacity),
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                ],
               ),
             )
           : null,

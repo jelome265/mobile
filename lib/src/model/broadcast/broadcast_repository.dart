@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:clock/clock.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:deep_pick/deep_pick.dart';
@@ -56,8 +58,52 @@ class BroadcastRepository {
     );
   }
 
-  Future<String> getGamePgn(BroadcastRoundId roundId, BroadcastGameId gameId) {
-    return client.read(Uri(path: 'api/study/$roundId/$gameId.pgn'));
+  ///https://github.com/lichess-org/lila/commit/babed07950fd2028be66128ff33ff3d34a0f291f
+  Future<BroadcastGamePgnWithAnalysisSummary> getGamePgn(
+    BroadcastRoundId roundId,
+    BroadcastGameId gameId, {
+    bool withAnalysisSummary = true,
+  }) async {
+    final queryParams = withAnalysisSummary ? {'analysisHeader': '1'} : null;
+    final response = await client.get(
+      Uri(path: 'api/study/$roundId/$gameId.pgn', queryParameters: queryParams),
+    );
+    final pgn = response.body;
+    BroadcastAnalysisSummary? analysisSummary;
+
+    final analysisHeader = response.headers['x-lichess-analysis'];
+    if (analysisHeader != null) {
+      final json = jsonDecode(analysisHeader) as Map<String, dynamic>;
+      analysisSummary = _analysisSummaryFromPick(json);
+    }
+
+    return (pgn: pgn, analysisSummary: analysisSummary);
+  }
+
+  BroadcastAnalysisSummary _analysisSummaryFromPick(Map<String, dynamic> json) {
+    final summary = pick(json, 'summary').required();
+    return (
+      division: pick(json, 'division').letOrNull(_divisionFromPick),
+      white: _playerAnalysisSummaryFromPick(summary('white').required()),
+      black: _playerAnalysisSummaryFromPick(summary('black').required()),
+    );
+  }
+
+  BroadcastPlayerAnalysisSummary _playerAnalysisSummaryFromPick(RequiredPick pick) {
+    return (
+      inaccuracies: pick('inaccuracy').asIntOrThrow(),
+      mistakes: pick('mistake').asIntOrThrow(),
+      blunders: pick('blunder').asIntOrThrow(),
+      acpl: pick('acpl').asIntOrThrow(),
+      accuracy: pick('accuracy').asIntOrThrow(),
+    );
+  }
+
+  Division _divisionFromPick(RequiredPick pick) {
+    return Division(
+      middlegame: pick('middle').asDoubleOrNull(),
+      endgame: pick('end').asDoubleOrNull(),
+    );
   }
 
   Future<IList<BroadcastPlayerWithOverallResult>> getPlayers(BroadcastTournamentId tournamentId) {
@@ -155,6 +201,14 @@ BroadcastTournamentGroup _tournamentGroupFromPick(RequiredPick pick) {
   return (id: id, name: name, active: active, live: live);
 }
 
+BroadcastCustomPointsPerColor _customPointsPerColorFromPick(RequiredPick pick) =>
+    (win: pick('win').asDoubleOrThrow(), draw: pick('draw').asDoubleOrThrow());
+
+BroadcastCustomScoring _customScoringFromPick(RequiredPick pick) => {
+  Side.white: _customPointsPerColorFromPick(pick('white').required()),
+  Side.black: _customPointsPerColorFromPick(pick('black').required()),
+}.lock;
+
 BroadcastRound _roundFromPick(RequiredPick pick) {
   final live = pick('ongoing').asBoolOrFalse();
   final finished = pick('finished').asBoolOrFalse();
@@ -172,6 +226,7 @@ BroadcastRound _roundFromPick(RequiredPick pick) {
     startsAt: pick('startsAt').asDateTimeFromMillisecondsOrNull(),
     finishedAt: pick('finishedAt').asDateTimeFromMillisecondsOrNull(),
     startsAfterPrevious: pick('startsAfterPrevious').asBoolOrFalse(),
+    customScoring: pick('customScoring').letOrNull(_customScoringFromPick),
   );
 }
 
@@ -280,9 +335,11 @@ BroadcastPlayerWithOverallResult _playerWithOverallResultFromPick(RequiredPick p
     played: pick('played').asIntOrThrow(),
     score: pick('score').asDoubleOrNull(),
     rank: pick('rank').asIntOrNull(),
-    ratingDiff: pick('ratingDiff').asIntOrNull(),
-    performance: pick('performance').asIntOrNull(),
+    ratingsMap: pick('ratingsMap').letOrNull(pickStats),
+    ratingDiffs: pick('ratingDiffs').letOrNull(pickStats),
+    performances: pick('performances').letOrNull(pickStats),
     tieBreaks: pick('tiebreaks').asListOrNull(_tieBreakDetailFromPick)?.toIList(),
+    team: pick('team').asStringOrNull(),
   );
 }
 
@@ -304,13 +361,34 @@ BroadcastPlayerWithGameResults _makePlayerWithGameResultsFromJson(Map<String, dy
 
 BroadcastFideData _fideDataFromPick(Pick pick) {
   return (
-    ratings: (
-      standard: pick('ratings', 'standard').asIntOrNull(),
-      rapid: pick('ratings', 'rapid').asIntOrNull(),
-      blitz: pick('ratings', 'blitz').asIntOrNull(),
-    ),
+    ratings: pick('ratings').letOrNull(pickStats) ?? const IMap.empty(),
     birthYear: pick('year').asIntOrNull(),
   );
+}
+
+BroadcastFideTC _fideTCFromString(RequiredPick pick) {
+  final tc = pick.asStringOrNull();
+  switch (tc) {
+    case 'standard':
+      return BroadcastFideTC.standard;
+    case 'rapid':
+      return BroadcastFideTC.rapid;
+    case 'blitz':
+      return BroadcastFideTC.blitz;
+    default:
+      throw PickException('Unknown FIDE time control: $tc');
+  }
+}
+
+StatByFideTC pickStats(RequiredPick pick) {
+  final standard = pick('standard').asIntOrNull();
+  final rapid = pick('rapid').asIntOrNull();
+  final blitz = pick('blitz').asIntOrNull();
+  return {
+    if (standard != null) BroadcastFideTC.standard: standard,
+    if (rapid != null) BroadcastFideTC.rapid: rapid,
+    if (blitz != null) BroadcastFideTC.blitz: blitz,
+  }.lock;
 }
 
 BroadcastPlayerGameResult _playerGameResultFromPick(RequiredPick pick) {
@@ -328,8 +406,10 @@ BroadcastPlayerGameResult _playerGameResultFromPick(RequiredPick pick) {
     roundId: pick('round').asBroadcastRoundIdOrThrow(),
     gameId: pick('id').asBroadcastGameIdOrThrow(),
     color: pick('color').asSideOrThrow(),
+    fideTC: _fideTCFromString(pick('fideTC').required()),
     ratingDiff: pick('ratingDiff').asIntOrNull(),
     points: points,
+    customPoints: pick('customPoints').asDoubleOrNull(),
     opponent: _playerFromPick(pick('opponent').required()),
   );
 }

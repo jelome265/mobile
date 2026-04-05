@@ -1,20 +1,29 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:lichess_mobile/src/app.dart';
+import 'package:lichess_mobile/src/model/engine/evaluation_preferences.dart';
+import 'package:lichess_mobile/src/model/engine/nnue_service.dart';
 import 'package:lichess_mobile/src/model/game/game_storage.dart';
+import 'package:lichess_mobile/src/model/settings/preferences_storage.dart';
 import 'package:lichess_mobile/src/network/http.dart';
 import 'package:lichess_mobile/src/styles/lichess_icons.dart';
 import 'package:lichess_mobile/src/view/game/game_list_tile.dart';
 import 'package:lichess_mobile/src/view/home/games_carousel.dart';
+import 'package:lichess_mobile/src/view/home/home_tab_screen.dart';
 import 'package:lichess_mobile/src/widgets/buttons.dart';
 import 'package:lichess_mobile/src/widgets/feedback.dart';
+import 'package:lichess_mobile/src/widgets/platform.dart';
 
+import '../../binding.dart';
 import '../../example_data.dart';
 import '../../mock_server_responses.dart';
 import '../../model/auth/fake_auth_storage.dart';
 import '../../model/challenge/challenge_repository_test.dart';
+import '../../model/engine/fake_nnue_service.dart';
 import '../../network/fake_http_client_factory.dart';
 import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
@@ -348,6 +357,201 @@ void main() {
       expect(find.text('About Lichess...'), findsNothing);
       expect(find.text('Recent games'), findsOneWidget);
       expect(find.byType(GameListTile), findsNWidgets(3));
+    });
+
+    group('home customization tip', () {
+      const customizeTip =
+          "Tip: You can add more widgets to the Home Screen or remove those you don't need!";
+      testWidgets('shown when logged out', (tester) async {
+        final app = await makeTestProviderScope(tester, child: const Application());
+
+        await tester.pumpWidget(app);
+
+        // wait for connectivity
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.pump();
+
+        expect(find.text(customizeTip), findsOneWidget);
+      });
+
+      testWidgets('shown when logged in', (tester) async {
+        final app = await makeTestProviderScope(
+          tester,
+          child: const Application(),
+          authUser: fakeAuthUser,
+        );
+
+        await tester.pumpWidget(app);
+
+        // wait for connectivity
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.pump();
+
+        expect(find.text(customizeTip), findsOneWidget);
+      });
+
+      testWidgets('Can be dismissed via button', (tester) async {
+        final app = await makeTestProviderScope(
+          tester,
+          child: const Application(),
+          defaultPreferences: {kWelcomeMessageShownKey: true},
+        );
+
+        await tester.pumpWidget(app);
+
+        // wait for connectivity
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.pump();
+
+        expect(find.text(customizeTip), findsOneWidget);
+        await tester.tap(find.text('Dismiss'));
+        await tester.pumpAndSettle(); // wait for tip widget to be removed
+        expect(find.text(customizeTip), findsNothing);
+      });
+
+      testWidgets('Not shown if already dismissed', (tester) async {
+        final app = await makeTestProviderScope(tester, child: const Application());
+
+        TestLichessBinding.instance.sharedPreferences.setBool(
+          'app_hide_home_widget_customization_tip',
+          true,
+        );
+
+        await tester.pumpWidget(app);
+
+        // wait for connectivity
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.pump();
+
+        expect(find.text(customizeTip), findsNothing);
+      });
+
+      testWidgets('Can be dismissed via going to settings', (tester) async {
+        final app = await makeTestProviderScope(
+          tester,
+          child: const Application(),
+          defaultPreferences: {kWelcomeMessageShownKey: true},
+        );
+
+        await tester.pumpWidget(app);
+
+        // wait for connectivity
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.pump();
+
+        expect(find.text(customizeTip), findsOneWidget);
+
+        await tester.tap(find.text('Customize'));
+        await tester.pumpAndSettle(); // wait for settings screen to open
+
+        expect(find.widgetWithText(PlatformAppBar, 'Home widgets'), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(TextButton, 'OK'));
+        await tester.pumpAndSettle(); // wait for home screen to re-appear
+
+        expect(find.byIcon(LichessIcons.logo_lichess), findsOneWidget); // we're back on home
+
+        expect(find.text(customizeTip), findsNothing);
+      });
+
+      testWidgets('Not shown when > $kColdAppStartsHideCustomizationTipThreshold app starts', (
+        tester,
+      ) async {
+        final app = await makeTestProviderScope(tester, child: const Application());
+
+        TestLichessBinding.instance.numAppStarts = kColdAppStartsHideCustomizationTipThreshold + 1;
+
+        await tester.pumpWidget(app);
+
+        // wait for connectivity
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.pump();
+
+        expect(find.text(customizeTip), findsNothing);
+      });
+    });
+
+    group('NNUE files missing tip', () {
+      const nnueFilesMissingTip =
+          'New Stockfish version available! Go to the settings to download the updated NNUE files.';
+      testWidgets('Shown if engine pref is latest sf and NNUE files are missing', (tester) async {
+        final app = await makeTestProviderScope(
+          tester,
+          overrides: {
+            nnueServiceProvider: nnueServiceProvider.overrideWithValue(
+              FakeNnueServiceUnavailable(),
+            ),
+          },
+          authUser: fakeAuthUser,
+          defaultPreferences: {
+            PrefCategory.engineEvaluation.storageKey: jsonEncode(
+              EngineEvaluationPrefState.defaults
+                  .copyWith(enginePref: ChessEnginePref.sfLatest)
+                  .toJson(),
+            ),
+          },
+          child: const Application(),
+        );
+
+        await tester.pumpWidget(app);
+
+        // Wait for hasOutdatedNNUEFiles() future to complete
+        await tester.pumpAndSettle();
+
+        expect(find.text(nnueFilesMissingTip), findsOneWidget);
+      });
+
+      testWidgets('Not shown if nnue files are available', (tester) async {
+        final app = await makeTestProviderScope(
+          tester,
+          overrides: {
+            nnueServiceProvider: nnueServiceProvider.overrideWithValue(FakeNnueService()),
+          },
+          authUser: fakeAuthUser,
+          defaultPreferences: {
+            PrefCategory.engineEvaluation.storageKey: jsonEncode(
+              EngineEvaluationPrefState.defaults
+                  .copyWith(enginePref: ChessEnginePref.sfLatest)
+                  .toJson(),
+            ),
+          },
+          child: const Application(),
+        );
+
+        await tester.pumpWidget(app);
+
+        // Wait for hasOutdatedNNUEFiles() future to complete
+        await tester.pumpAndSettle();
+
+        expect(find.text(nnueFilesMissingTip), findsNothing);
+      });
+
+      testWidgets('Not shown if engine pref is sf16', (tester) async {
+        final app = await makeTestProviderScope(
+          tester,
+          overrides: {
+            nnueServiceProvider: nnueServiceProvider.overrideWithValue(
+              FakeNnueServiceUnavailable(),
+            ),
+          },
+          authUser: fakeAuthUser,
+          defaultPreferences: {
+            PrefCategory.engineEvaluation.storageKey: jsonEncode(
+              EngineEvaluationPrefState.defaults
+                  .copyWith(enginePref: ChessEnginePref.sf16)
+                  .toJson(),
+            ),
+          },
+          child: const Application(),
+        );
+
+        await tester.pumpWidget(app);
+
+        // Wait for hasOutdatedNNUEFiles() future to complete
+        await tester.pumpAndSettle();
+
+        expect(find.text(nnueFilesMissingTip), findsNothing);
+      });
     });
   });
 }

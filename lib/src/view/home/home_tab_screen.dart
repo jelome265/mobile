@@ -17,14 +17,14 @@ import 'package:lichess_mobile/src/model/challenge/challenges.dart';
 import 'package:lichess_mobile/src/model/common/id.dart';
 import 'package:lichess_mobile/src/model/correspondence/correspondence_game_storage.dart';
 import 'package:lichess_mobile/src/model/correspondence/offline_correspondence_game.dart';
+import 'package:lichess_mobile/src/model/engine/evaluation_preferences.dart';
+import 'package:lichess_mobile/src/model/engine/nnue_service.dart';
 import 'package:lichess_mobile/src/model/game/game_history.dart';
-import 'package:lichess_mobile/src/model/game/game_storage.dart';
 import 'package:lichess_mobile/src/model/message/message_repository.dart';
 import 'package:lichess_mobile/src/model/tournament/tournament.dart';
 import 'package:lichess_mobile/src/model/tournament/tournament_providers.dart';
 import 'package:lichess_mobile/src/model/user/user.dart';
 import 'package:lichess_mobile/src/network/connectivity.dart';
-import 'package:lichess_mobile/src/network/http.dart';
 import 'package:lichess_mobile/src/styles/lichess_icons.dart';
 import 'package:lichess_mobile/src/styles/styles.dart';
 import 'package:lichess_mobile/src/tab_scaffold.dart';
@@ -47,6 +47,7 @@ import 'package:lichess_mobile/src/view/play/ongoing_games_screen.dart';
 import 'package:lichess_mobile/src/view/play/play_bottom_sheet.dart';
 import 'package:lichess_mobile/src/view/play/play_menu.dart';
 import 'package:lichess_mobile/src/view/play/quick_game_matrix.dart';
+import 'package:lichess_mobile/src/view/settings/engine_settings_screen.dart';
 import 'package:lichess_mobile/src/view/tournament/tournament_list_screen.dart';
 import 'package:lichess_mobile/src/view/user/challenge_requests_screen.dart';
 import 'package:lichess_mobile/src/view/user/player_screen.dart';
@@ -57,9 +58,11 @@ import 'package:lichess_mobile/src/widgets/haptic_refresh_indicator.dart';
 import 'package:lichess_mobile/src/widgets/list.dart';
 import 'package:lichess_mobile/src/widgets/misc.dart';
 import 'package:lichess_mobile/src/widgets/platform.dart';
-import 'package:lichess_mobile/src/widgets/platform_alert_dialog.dart';
 import 'package:lichess_mobile/src/widgets/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+/// Number of cold app starts before hiding the home customization tip.
+const kColdAppStartsHideCustomizationTipThreshold = 5;
 
 class HomeTabScreen extends ConsumerStatefulWidget {
   const HomeTabScreen({super.key, this.editModeEnabled = false});
@@ -95,9 +98,11 @@ class _IsEditingHome extends InheritedWidget {
   }
 }
 
+const String kWelcomeMessageShownKey = 'app_welcome_message_shown';
+const String kHideHomeWidgetCustomizationTip = 'app_hide_home_widget_customization_tip';
+
 class _HomeScreenState extends ConsumerState<HomeTabScreen> {
   ImageColorWorker? _worker;
-  bool _imageAreCached = false;
   final _refreshKey = GlobalKey<RefreshIndicatorState>();
 
   DateTime? _focusLostAt;
@@ -108,89 +113,14 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
   @override
   void initState() {
     super.initState();
-    _precacheImages();
-
-    showWelcomeMessage();
+    _loadImageWorker();
   }
 
-  Future<void> _precacheImages() async {
+  Future<void> _loadImageWorker() async {
     final worker = await ref.read(imageWorkerFactoryProvider).spawn();
     if (mounted) {
       setState(() {
         _worker = worker;
-      });
-      ref.listenManual(blogCarouselProvider, (_, current) async {
-        if (current.hasValue && !_imageAreCached) {
-          _imageAreCached = true;
-          await preCacheBlogImages(
-            context,
-            posts: current.value!,
-            worker: worker,
-            externalClient: ref.read(defaultClientProvider),
-          );
-        }
-      });
-    }
-  }
-
-  Future<bool> shouldDisplayWelcomeMessage() async {
-    if (LichessBinding.instance.sharedPreferences.getBool('app_welcome_message_shown') == true) {
-      return false;
-    }
-
-    if (ref.read(authControllerProvider) != null) {
-      return false;
-    }
-
-    final hasPlayedGames =
-        await (await ref.read(gameStorageProvider.future)).count(userId: null) > 0;
-
-    return !hasPlayedGames;
-  }
-
-  Future<void> showWelcomeMessage() async {
-    final prefs = LichessBinding.instance.sharedPreferences;
-    if (await shouldDisplayWelcomeMessage()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final context = ref.read(currentNavigatorKeyProvider).currentContext;
-        if (context == null || !context.mounted) return;
-        showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog.adaptive(
-            content: Container(
-              color:
-                  DialogTheme.of(context).backgroundColor ??
-                  ColorScheme.of(context).surfaceContainerHigh,
-              padding: const EdgeInsets.all(8.0),
-              child: Text.rich(
-                textAlign: TextAlign.center,
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '${context.l10n.mobileWelcomeToLichessApp}\n\n',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    TextSpan(
-                      text: context.l10n.mobileNotAllFeaturesAreAvailable,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              PlatformDialogAction(
-                child: Text(context.l10n.ok),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          ),
-        ).then((_) {
-          prefs.setBool('app_welcome_message_shown', true);
-        });
       });
     }
   }
@@ -230,6 +160,8 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
             ? ref.watch(blogCarouselProvider)
             : const AsyncValue.data(IListConst<BlogPost>([]));
 
+        final isKidMode = ref.watch(kidModeProvider).value ?? false;
+
         // Show the welcome screen if not logged in and there are no recent games and no stored games
         // (i.e. first installation, or the user has never played a game)
         final shouldShowWelcomeScreen =
@@ -240,36 +172,44 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
 
         if (shouldShowWelcomeScreen) {
           final welcomeWidgets = [
-            const _GreetingWidget(),
-            Padding(
-              padding: Styles.bodySectionPadding,
-              child: LichessMessage(style: TextTheme.of(context).bodyLarge),
+            const _EditableWidget(
+              widget: HomeEditableWidget.hello,
+              shouldShow: true,
+              child: _GreetingWidget(),
             ),
-            const SizedBox(height: 8.0),
-            if (authUser == null) ...[
-              const Center(child: _SignInWidget()),
-              const SizedBox(height: 16.0),
-            ],
-            if (Theme.of(context).platform != TargetPlatform.iOS &&
-                (authUser == null || authUser.user.isPatron != true)) ...[
+            if (!widget.editModeEnabled) ...[
+              Padding(
+                padding: Styles.bodySectionPadding,
+                child: LichessMessage(style: TextTheme.of(context).bodyLarge),
+              ),
+              const SizedBox(height: 8.0),
+              if (authUser == null) ...[
+                const Center(child: _SignInWidget()),
+                const SizedBox(height: 16.0),
+              ],
+              if (Theme.of(context).platform != TargetPlatform.iOS &&
+                  (authUser == null || authUser.user.isPatron != true)) ...[
+                Center(
+                  child: FilledButton.tonal(
+                    onPressed: () {
+                      launchUrl(Uri.parse('https://lichess.org/patron'));
+                    },
+                    child: Text(context.l10n.patronDonate),
+                  ),
+                ),
+                const SizedBox(height: 16.0),
+              ],
               Center(
                 child: FilledButton.tonal(
                   onPressed: () {
-                    launchUrl(Uri.parse('https://lichess.org/patron'));
+                    launchUrl(Uri.parse('https://lichess.org/about'));
                   },
-                  child: Text(context.l10n.patronDonate),
+                  child: Text(context.l10n.aboutX('Lichess...')),
                 ),
               ),
-              const SizedBox(height: 16.0),
+              const _WelcomeMessageCard(),
+              const _HomeCustomizationTip(),
             ],
-            Center(
-              child: FilledButton.tonal(
-                onPressed: () {
-                  launchUrl(Uri.parse('https://lichess.org/about'));
-                },
-                child: Text(context.l10n.aboutX('Lichess...')),
-              ),
-            ),
           ];
 
           widgets = [
@@ -303,7 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
                 shouldShow: status.isOnline,
                 child: FeaturedTournamentsWidget(featured: featuredTournaments),
               ),
-              if (_worker != null)
+              if (_worker != null && !isKidMode)
                 _EditableWidget(
                   widget: HomeEditableWidget.blogCarousel,
                   shouldShow: status.isOnline,
@@ -318,6 +258,10 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
               shouldShow: true,
               child: _GreetingWidget(),
             ),
+            if (!widget.editModeEnabled) ...[
+              const _HomeCustomizationTip(),
+              const _NNUEFilesOutdatedTip(),
+            ],
             if (status.isOnline)
               _EditableWidget(
                 widget: HomeEditableWidget.perfCards,
@@ -346,7 +290,7 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
                     children: [
                       const SizedBox(height: 8.0),
                       FeaturedTournamentsWidget(featured: featuredTournaments),
-                      if (_worker != null)
+                      if (_worker != null && !isKidMode)
                         _EditableWidget(
                           widget: HomeEditableWidget.blogCarousel,
                           shouldShow: status.isOnline,
@@ -374,6 +318,10 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
               shouldShow: true,
               child: _GreetingWidget(),
             ),
+            if (!widget.editModeEnabled) ...[
+              const _HomeCustomizationTip(),
+              const _NNUEFilesOutdatedTip(),
+            ],
             _EditableWidget(
               widget: HomeEditableWidget.perfCards,
               shouldShow: authUser != null && status.isOnline,
@@ -398,7 +346,7 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
               shouldShow: status.isOnline,
               child: FeaturedTournamentsWidget(featured: featuredTournaments),
             ),
-            if (_worker != null)
+            if (_worker != null && !isKidMode)
               _EditableWidget(
                 widget: HomeEditableWidget.blogCarousel,
                 shouldShow: status.isOnline,
@@ -465,7 +413,7 @@ class _HomeScreenState extends ConsumerState<HomeTabScreen> {
                             onPressed: () {
                               Navigator.of(context).pop();
                             },
-                            child: const Text('OK'),
+                            child: Text(context.l10n.ok),
                           ),
                         ],
                       ),
@@ -613,6 +561,11 @@ class _EditableWidget extends ConsumerWidget {
               Expanded(
                 child: IgnorePointer(ignoring: isEditing, child: child),
               ),
+              if (widget == HomeEditableWidget.quickPairing)
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => showTimeControlPicker(context, ref),
+                ),
             ],
           )
         : widget.alwaysEnabled || isEnabled
@@ -1000,5 +953,246 @@ class _ChallengeScreenButton extends ConsumerWidget {
         onPressed: null,
       ),
     };
+  }
+}
+
+class _WelcomeMessageCard extends StatefulWidget {
+  const _WelcomeMessageCard();
+
+  @override
+  State<_WelcomeMessageCard> createState() => _WelcomeMessageCardState();
+}
+
+class _WelcomeMessageCardState extends State<_WelcomeMessageCard> {
+  bool _shouldDisplay() {
+    return LichessBinding.instance.sharedPreferences.getBool(kWelcomeMessageShownKey) != true;
+  }
+
+  void _dismiss() {
+    LichessBinding.instance.sharedPreferences.setBool(kWelcomeMessageShownKey, true);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_shouldDisplay()) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: Styles.bodyPadding,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${context.l10n.mobileWelcomeToLichessApp}\n\n',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      TextSpan(
+                        text: context.l10n.mobileNotAllFeaturesAreAvailable,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [TextButton(onPressed: _dismiss, child: Text(context.l10n.ok))],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NNUEFilesOutdatedTip extends ConsumerStatefulWidget {
+  const _NNUEFilesOutdatedTip();
+
+  @override
+  ConsumerState<_NNUEFilesOutdatedTip> createState() => _NNUEFilesOutdatedTipState();
+}
+
+class _NNUEFilesOutdatedTipState extends ConsumerState<_NNUEFilesOutdatedTip> {
+  bool _openedSettings = false;
+  late Future<bool> _checkNNUEFilesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkNNUEFilesFuture = ref.read(nnueServiceProvider).hasOutdatedNNUEFiles();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chessEnginePref = ref.watch(engineEvaluationPreferencesProvider).enginePref;
+    if (chessEnginePref != ChessEnginePref.sfLatest) {
+      return const SizedBox.shrink();
+    }
+
+    final nnueService = ref.watch(nnueServiceProvider);
+    if (nnueService.isDownloadingNNUEFiles) {
+      return const SizedBox.shrink();
+    }
+
+    return FocusDetector(
+      // If we come back from the settings, trigger rebuild to hide the widget if the user has updated the NNUE files
+      onFocusRegained: () {
+        if (_openedSettings) {
+          setState(() {
+            _checkNNUEFilesFuture = nnueService.hasOutdatedNNUEFiles();
+            _openedSettings = false;
+          });
+        }
+      },
+      child: FutureBuilder(
+        future: _checkNNUEFilesFuture,
+        builder: (context, snapshot) {
+          final hasOutdatedNNUEFiles = snapshot.data ?? false;
+          if (!hasOutdatedNNUEFiles) {
+            return const SizedBox.shrink();
+          }
+
+          return Padding(
+            padding: Styles.bodyPadding,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning,
+                            size: 25.0,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8.0),
+                          const Flexible(
+                            child: Text(
+                              // TODO l10n
+                              'New Stockfish version available! Go to the settings to download the updated NNUE files.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _openedSettings = true;
+                            });
+                            Navigator.of(
+                              context,
+                              rootNavigator: true,
+                            ).push(EngineSettingsScreen.buildRoute(context));
+                          },
+                          // TODO l10n
+                          child: const Text('Open settings'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HomeCustomizationTip extends StatefulWidget {
+  const _HomeCustomizationTip();
+
+  @override
+  State<_HomeCustomizationTip> createState() => _HomeCustomizationTipState();
+}
+
+class _HomeCustomizationTipState extends State<_HomeCustomizationTip> {
+  bool _shouldDisplayHomeWidgetCustomizationTip() {
+    final prefs = LichessBinding.instance.sharedPreferences;
+
+    return prefs.getBool(kHideHomeWidgetCustomizationTip) != true &&
+        LichessBinding.instance.numAppStarts <= kColdAppStartsHideCustomizationTipThreshold;
+  }
+
+  void _setHideHomeWidgetCustomizationTip(BuildContext context) {
+    LichessBinding.instance.sharedPreferences.setBool(kHideHomeWidgetCustomizationTip, true);
+
+    // trigger rebuild to hide the tip
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_shouldDisplayHomeWidgetCustomizationTip()) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: Styles.bodyPadding,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.lightbulb_circle_outlined,
+                      size: 25.0,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8.0),
+                    Flexible(child: Text(context.l10n.mobileCustomizeHomeTip)),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(
+                        context,
+                        rootNavigator: true,
+                      ).push(HomeTabScreen.buildRoute(context, editModeEnabled: true));
+
+                      _setHideHomeWidgetCustomizationTip(context);
+                    },
+                    child: Text(context.l10n.mobileCustomizeButton),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      _setHideHomeWidgetCustomizationTip(context);
+                    },
+                    child: Text(context.l10n.mobileCustomizeHomeTipDismiss),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

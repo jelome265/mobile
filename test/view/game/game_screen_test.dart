@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:chessground/chessground.dart';
@@ -8,26 +9,36 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/misc.dart' show Override, ProviderOrFamily;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
-import 'package:lichess_mobile/src/model/account/account_preferences.dart';
+import 'package:lichess_mobile/src/constants.dart';
+import 'package:lichess_mobile/src/model/account/account_preferences.dart' hide Challenge;
+import 'package:lichess_mobile/src/model/auth/auth_controller.dart';
+import 'package:lichess_mobile/src/model/challenge/challenge.dart';
 import 'package:lichess_mobile/src/model/common/chess.dart';
+import 'package:lichess_mobile/src/model/common/game.dart';
 import 'package:lichess_mobile/src/model/common/id.dart';
 import 'package:lichess_mobile/src/model/common/service/sound_service.dart';
 import 'package:lichess_mobile/src/model/common/socket.dart';
+import 'package:lichess_mobile/src/model/common/speed.dart';
 import 'package:lichess_mobile/src/model/game/game.dart';
 import 'package:lichess_mobile/src/model/game/game_controller.dart';
 import 'package:lichess_mobile/src/model/game/game_socket_events.dart';
 import 'package:lichess_mobile/src/model/game/game_status.dart';
+import 'package:lichess_mobile/src/model/lobby/create_game_service.dart';
 import 'package:lichess_mobile/src/model/lobby/game_seek.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
 import 'package:lichess_mobile/src/model/settings/preferences_storage.dart';
+import 'package:lichess_mobile/src/model/user/user.dart';
 import 'package:lichess_mobile/src/network/http.dart';
 import 'package:lichess_mobile/src/network/socket.dart';
 import 'package:lichess_mobile/src/styles/lichess_icons.dart';
+import 'package:lichess_mobile/src/view/chat/chat_screen.dart';
 import 'package:lichess_mobile/src/view/game/game_screen.dart';
 import 'package:lichess_mobile/src/view/game/game_screen_providers.dart';
 import 'package:lichess_mobile/src/widgets/bottom_bar.dart';
 import 'package:lichess_mobile/src/widgets/clock.dart';
+import 'package:lichess_mobile/src/widgets/pockets.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wakelock_plus_platform_interface/messages.g.dart';
 
 import '../../model/game/game_socket_example_data.dart';
@@ -38,15 +49,26 @@ import '../../test_provider_scope.dart';
 final client = MockClient((request) {
   if (request.url.path == '/api/board/seek') {
     return mockResponse('ok', 200);
+  } else if (request.url.path == '/game/export/CCW6EEru') {
+    return mockResponse('''
+{"id":"CCW6EEru","rated":true,"source":"lobby","variant":"standard","speed":"bullet","perf":"bullet","createdAt":1706185945680,"lastMoveAt":1706186170504,"status":"resign","players":{"white":{"user":{"name":"veloce","id":"veloce"},"rating":1789,"ratingDiff":9},"black":{"user":{"name":"chabrot","id":"chabrot"},"rating":1810,"ratingDiff":-9}},"winner":"white","opening":{"eco":"C52","name":"Italian Game: Evans Gambit, Main Line","ply":10},"moves":"e4 e5 Nf3 Nc6 Bc4 Bc5 b4 Bxb4 c3 Ba5 d4 Bb6 Ba3 Nf6 Qb3 d6 Bxf7+ Kf8 O-O Qe7 Nxe5 Nxe5 dxe5 Be6 Bxe6 Nxe4 Re1 Nc5 Bxc5 Bxc5 Qxb7 Re8 Bh3 dxe5 Qf3+ Kg8 Nd2 Rf8 Qd5+ Rf7 Be6 Qxe6 Qxe6","clocks":[12003,12003,11883,11811,11683,11379,11307,11163,11043,11043,10899,10707,10155,10483,10019,9995,9635,9923,8963,8603,7915,8283,7763,7459,7379,6083,6587,5819,6363,5651,6075,5507,5675,4803,5059,4515,4547,3555,3971,3411,3235,3123,3120,2742],"clock":{"initial":120,"increment":1,"totalTime":160}}
+''', 200);
   }
   return mockResponse('', 404);
 });
 
 class MockSoundService extends Mock implements SoundService {}
 
+class MockCreateGameService extends Mock implements CreateGameService {}
+
 void main() {
   const testGameFullId = GameFullId('qVChCOTcHSeW');
   final testGameSocketUri = GameController.socketUri(testGameFullId);
+
+  setUpAll(() {
+    registerFallbackValue(Variant.standard);
+    registerFallbackValue(Sound.error);
+  });
 
   group('Loading', () {
     testWidgets('a game directly with initialGameId', (WidgetTester tester) async {
@@ -171,6 +193,105 @@ void main() {
         reason: 'board position should not change',
       );
     });
+
+    for (final authUser in [
+      null,
+      AuthUser(
+        user: LightUser(id: UserId.fromUserName('John'), name: 'John'),
+        token: 'test-token',
+      ),
+    ]) {
+      testWidgets('displays game link for open challenge, logged in: ${authUser != null}', (
+        WidgetTester tester,
+      ) async {
+        const challengeRequest = ChallengeRequest(
+          destUser: null,
+          variant: Variant.standard,
+          timeControl: ChallengeTimeControlType.clock,
+          rated: true,
+          sideChoice: SideChoice.white,
+        );
+        final challenge = Challenge(
+          sideChoice: challengeRequest.sideChoice,
+          id: const ChallengeId('challengeId'),
+          variant: challengeRequest.variant,
+          timeControl: challengeRequest.timeControl,
+          rated: challengeRequest.rated,
+          speed: Speed.blitz,
+          status: ChallengeStatus.created,
+        );
+
+        final createGameService = MockCreateGameService();
+        when(
+          () => createGameService.newOpenOrRealTimeChallenge(challengeRequest),
+        ).thenAnswer((_) async => challenge);
+        when(
+          () => createGameService.waitForChallengeResponse(challenge),
+        ).thenAnswer((_) => Completer<ChallengeResponse>().future);
+
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const GameScreen(source: UserChallengeSource(challengeRequest)),
+          authUser: authUser,
+          overrides: {
+            createGameServiceProvider: createGameServiceProvider.overrideWith(
+              (_) => createGameService,
+            ),
+          },
+        );
+        await tester.pumpWidget(app);
+
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Chessboard), findsOneWidget);
+        expect(find.byType(PieceWidget), findsNothing);
+        expect(find.text('To invite someone to play, give this URL'), findsOneWidget);
+        expect(find.text('Or let your opponent scan this QR code'), findsOneWidget);
+        expect(find.byType(QrImageView), findsOneWidget);
+        expect(find.textContaining('https://$kLichessHost/${challenge.id.value}'), findsOneWidget);
+        expect(
+          find.text('Or invite a Lichess user'),
+          authUser == null ? findsNothing : findsOneWidget,
+        );
+      });
+    }
+  });
+
+  group('Plays sound for', () {
+    testWidgets('move', (WidgetTester tester) async {
+      final mockSoundService = MockSoundService();
+      when(() => mockSoundService.play(any())).thenAnswer((_) async {});
+
+      await createTestGame(
+        tester,
+        pgn: 'e4 e5',
+        overrides: {
+          soundServiceProvider: soundServiceProvider.overrideWith((_) => mockSoundService),
+        },
+      );
+
+      await playMove(tester, 'd2', 'd4');
+      await tester.pumpAndSettle();
+
+      verify(() => mockSoundService.play(Sound.move));
+    });
+
+    testWidgets('captures', (WidgetTester tester) async {
+      final mockSoundService = MockSoundService();
+      when(() => mockSoundService.playCaptureSound(any())).thenAnswer((_) async {});
+
+      await createTestGame(
+        tester,
+        pgn: 'e4 d5',
+        overrides: {
+          soundServiceProvider: soundServiceProvider.overrideWith((_) => mockSoundService),
+        },
+      );
+
+      await playMove(tester, 'e4', 'd5');
+
+      verify(() => mockSoundService.playCaptureSound(Variant.standard));
+    });
   });
 
   group('Game actions', () {
@@ -215,6 +336,126 @@ void main() {
       expect(find.byKey(const Key('f3-whiteknight')), findsOneWidget);
       // move appears in move list
       expect(find.text('Nf3'), findsOneWidget);
+    });
+
+    testWidgets('illegal premove is cancelled after opponent move with move confirmation', (
+      WidgetTester tester,
+    ) async {
+      const gameFullId = GameFullId('qVChCOTcHSeW');
+      final gameSocketUri = GameController.socketUri(gameFullId);
+
+      await createTestGame(
+        tester,
+        pgn: 'e4 e5',
+        clock: const (
+          running: true,
+          initial: Duration(minutes: 1),
+          increment: Duration.zero,
+          white: Duration(seconds: 58),
+          black: Duration(seconds: 54),
+          emerg: Duration(seconds: 10),
+        ),
+        serverPrefs: const ServerGamePrefs(
+          showRatings: true,
+          enablePremove: true,
+          autoQueen: .always,
+          confirmResign: true,
+          submitMove: true,
+          zenMode: .no,
+        ),
+      );
+      expect(find.byType(Chessboard), findsOneWidget);
+      expect(find.byType(PieceWidget), findsNWidgets(32));
+
+      // white plays d4 with confirmation
+      await playMove(tester, 'd2', 'd4');
+      expect(find.text('Confirm move'), findsOneWidget);
+      expect(find.byKey(const Key('d4-whitepawn')), findsOneWidget);
+
+      // white premoves d4-d5 (push the d-pawn, anticipating d5 stays free)
+      await playMove(tester, 'd4', 'd5');
+      await tester.pump();
+
+      // premove indicators should be visible
+      expect(find.byKey(const ValueKey('d4-premove')), findsOneWidget);
+      expect(find.byKey(const ValueKey('d5-premove')), findsOneWidget);
+
+      // confirm the move
+      await tester.tap(find.byIcon(CupertinoIcons.checkmark_rectangle_fill));
+      await tester.pump();
+
+      // premove indicators should still be visible after confirmation
+      expect(find.byKey(const ValueKey('d4-premove')), findsOneWidget);
+      expect(find.byKey(const ValueKey('d5-premove')), findsOneWidget);
+
+      // server acknowledges white's d4 move (ply 3)
+      sendServerSocketMessages(gameSocketUri, [
+        '{"t": "move", "v": 1, "d": {"ply": 3, "uci": "d2d4", "san": "d4", "clock": {"white": 57, "black": 54}}}',
+      ]);
+      await tester.pump();
+
+      // opponent plays d7-d5 (ply 4), blocking the premove
+      sendServerSocketMessages(gameSocketUri, [
+        '{"t": "move", "v": 2, "d": {"ply": 4, "uci": "d7d5", "san": "d5", "clock": {"white": 57, "black": 52}}}',
+      ]);
+      await tester.pump();
+
+      // let the premove microtask run
+      await tester.pump(const Duration(milliseconds: 1));
+
+      // premove should be cancelled since d4-d5 is now illegal (d5 is occupied)
+      expect(find.byKey(const ValueKey('d4-premove')), findsNothing);
+      expect(find.byKey(const ValueKey('d5-premove')), findsNothing);
+
+      // d5 should have black's pawn (opponent's move was applied)
+      expect(find.byKey(const Key('d5-blackpawn')), findsOneWidget);
+      // d4 should still have white's pawn
+      expect(find.byKey(const Key('d4-whitepawn')), findsOneWidget);
+    });
+
+    testWidgets('can premove drop moves in Crazyhouse', (WidgetTester tester) async {
+      const gameFullId = GameFullId('qVChCOTcHSeW');
+      final gameSocketUri = GameController.socketUri(gameFullId);
+
+      await createTestGame(
+        tester,
+        pgn: 'e4 d5 exd5',
+        variant: Variant.crazyhouse,
+        clock: const (
+          running: true,
+          initial: Duration(minutes: 1),
+          increment: Duration.zero,
+          white: Duration(seconds: 58),
+          black: Duration(seconds: 54),
+          emerg: Duration(seconds: 10),
+        ),
+        serverPrefs: const ServerGamePrefs(
+          showRatings: true,
+          enablePremove: true,
+          autoQueen: .always,
+          confirmResign: true,
+          submitMove: false,
+          zenMode: .no,
+        ),
+      );
+
+      await playDropMove(tester, Side.white, Role.pawn, 'a4');
+
+      // premove indicator should be visible
+      expect(find.byKey(const ValueKey('a4-premove')), findsOneWidget);
+
+      // opponent plays Qxd5
+      sendServerSocketMessages(gameSocketUri, [
+        '{"t": "move", "v": 1, "d": {"ply": 4, "uci": "d8d5", "san": "Qxd5", "clock": {"white": 57, "black": 52}}}',
+      ]);
+      await tester.pump();
+
+      // let the premove microtask run
+      await tester.pump(const Duration(milliseconds: 1));
+
+      // premove should have been played
+      expect(find.byKey(const ValueKey('a4-premove')), findsNothing);
+      expect(find.byKey(const Key('a4-whitepawn')), findsOneWidget);
     });
 
     testWidgets('takeback', (WidgetTester tester) async {
@@ -808,6 +1049,7 @@ void main() {
         find.widgetWithText(AppBar, 'Analysis board'),
         findsOneWidget,
       ); // analysis screen is now open
+      expect(find.byType(Chessboard), findsOneWidget);
       expect(find.byKey(const Key('e6-whitequeen')), findsOneWidget);
       expect(find.byKey(const Key('d5-lastMove')), findsOneWidget);
       expect(find.byKey(const Key('e6-lastMove')), findsOneWidget);
@@ -840,6 +1082,25 @@ void main() {
           () => mockSoundService.play(Sound.confirmation, volume: any(named: 'volume')),
         ).called(1);
       });
+
+      testWidgets('chat messages do not disappear when game state changes', (
+        WidgetTester tester,
+      ) async {
+        await createTestGame(tester, pgn: 'e4 e5');
+        sendServerSocketMessages(testGameSocketUri, [
+          '{"t":"message","d":{"u":"Steven","t":"Hello!"}}',
+        ]);
+        await tester.pump();
+
+        // Play a move to update the GameController's state.
+        // There used to be a bug where this would make chat messages disappear.
+        await playMove(tester, 'g1', 'f3');
+
+        await tester.tap(find.byType(ChatBottomBarButton));
+        await tester.pumpAndSettle(); // wait for chat to open
+
+        expect(find.text('Hello!'), findsOneWidget);
+      });
     });
 
     group('Disabled', () {
@@ -860,6 +1121,84 @@ void main() {
         await tester.pump();
         verifyNever(() => mockSoundService.play(Sound.confirmation));
       });
+    });
+  });
+
+  group('Crazyhouse', () {
+    testWidgets('displays pockets and handles player drop moves', (tester) async {
+      final socketFactory = ListenableFakeWebSocketChannelFactory(
+        createDefaultFakeWebSocketChannel,
+      );
+      // After 1.e4 d5 2.exd5 Qxd5, white has a pawn in pocket and it's white's turn
+      await createTestGame(
+        tester,
+        variant: Variant.crazyhouse,
+        pgn: 'e4 d5 exd5 Qxd5',
+        youAre: Side.white,
+        socketFactory: socketFactory,
+      );
+
+      final dropExpectation = expectLater(
+        socketFactory.outgoingMessages(testGameSocketUri),
+        emitsThrough('{"t":"drop","d":{"role":"pawn","pos":"c4","s":"0","a":1}}'),
+      );
+
+      expect(find.byType(Chessboard), findsOneWidget);
+      expect(find.byType(PocketsMenu), findsNWidgets(2));
+
+      // White drops a pawn to c4
+      await playDropMove(tester, Side.white, Role.pawn, 'c4');
+      await tester.pumpAndSettle();
+
+      // Pawn should appear on c4 (transient move before server ack)
+      expect(find.byKey(const ValueKey('c4-whitepawn')), findsOneWidget);
+
+      await dropExpectation;
+    });
+
+    testWidgets("Cannot interact with the opponent's pockets", (tester) async {
+      // After 1.e4 d5 2.exd5 Qxd5 Nf3, white and black both have a pawn in pocket and it's black's turn
+      await createTestGame(
+        tester,
+        variant: Variant.crazyhouse,
+        pgn: 'e4 d5 exd5 Qxd5 Nf3',
+        youAre: Side.white,
+      );
+
+      expect(find.byType(Chessboard), findsOneWidget);
+      expect(find.byType(PocketsMenu), findsNWidgets(2));
+
+      // Regression test: it used to be possible to interact with the opponent's pockets and play a DropMove for them
+      await playDropMove(tester, Side.black, Role.pawn, 'd6');
+      await tester.pumpAndSettle();
+
+      // Move should not be played since it's not our turn and the opponent's pockets should not be interactable
+      expect(find.byKey(const ValueKey('d6-blackpawn')), findsNothing);
+    });
+
+    testWidgets('correctly handles opponent drop move received from server', (tester) async {
+      const gameFullId = GameFullId('qVChCOTcHSeW');
+      final gameSocketUri = GameController.socketUri(gameFullId);
+
+      // After 1.e4 d5 2.exd5 Qxd5, white has a pawn in pocket and it's white's turn
+      await createTestGame(
+        tester,
+        variant: Variant.crazyhouse,
+        pgn: 'e4 d5 exd5 Qxd5',
+        youAre: Side.black,
+      );
+
+      expect(find.byType(Chessboard), findsOneWidget);
+      expect(find.byType(PocketsMenu), findsNWidgets(2));
+
+      // Server sends white's drop move P@c4 (ply 5 after the 4 pgn moves)
+      sendServerSocketMessages(gameSocketUri, [
+        '{"t": "drop", "v": 1, "d": {"role": "pawn", "ply": 5, "uci": "P@c4", "san": "P@c4", "clock": {"white": 176, "black": 180}}}',
+      ]);
+      await tester.pump();
+
+      // White pawn should appear on c4
+      expect(find.byKey(const ValueKey('c4-whitepawn')), findsOneWidget);
     });
   });
 

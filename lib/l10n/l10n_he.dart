@@ -67,6 +67,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get mobileMustBeLoggedIn => 'יש להתחבר כדי לצפות בדף זה.';
 
   @override
+  String get mobileNewGame => 'New game';
+
+  @override
   String get mobileNoSearchResults => 'אין תוצאות';
 
   @override
@@ -240,6 +243,75 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get mobileWelcomeToLichessApp => 'Welcome to Lichess app!';
+
+  @override
+  String get mobileViewGame => 'View Game';
+
+  @override
+  String get mobileCustomizeHomeTip => 'Tip: You can add more widgets to the Home Screen or remove those you don\'t need!';
+
+  @override
+  String get mobileCustomizeHomeTipDismiss => 'Dismiss';
+
+  @override
+  String get mobileCustomizeButton => 'Customize';
+
+  @override
+  String get mobileStopShowingThreat => 'Stop showing threat';
+
+  @override
+  String get mobileTournamentCompleted => 'Completed';
+
+  @override
+  String get mobileTournamentJumpToMyPage => 'Jump to my page';
+
+  @override
+  String get mobileDisplayModeCompact => 'Compact';
+
+  @override
+  String get mobileDisplayModeDetailed => 'Detailed';
+
+  @override
+  String get mobileOpeningExplorerNotAvailableOffline => 'Opening Explorer is not available offline.';
+
+  @override
+  String get mobileChallengeCreated => 'Challenge created: You will be notified when the game starts.\nYou can access it from the home tab.';
+
+  @override
+  String get mobilePreviousPage => 'Previous';
+
+  @override
+  String get mobileOrImportPgnFile => 'Or import a PGN file';
+
+  @override
+  String get variantStandardTitle => 'Standard rules of chess (FIDE)';
+
+  @override
+  String get variantChess960Title => 'The starting position of the home rank pieces is randomised.';
+
+  @override
+  String get variantKingOfTheHillTitle => 'Bring your King to the center to win the game.';
+
+  @override
+  String get variantThreeCheckTitle => 'Check your opponent 3 times to win the game.';
+
+  @override
+  String get variantAntichessTitle => 'Lose all your pieces (or get stalemated) to win the game.';
+
+  @override
+  String get variantAtomicTitle => 'Nuke your opponent\'s king to win.';
+
+  @override
+  String get variantHordeTitle => 'One side has a large number of pawns, the other has a normal army.';
+
+  @override
+  String get variantRacingKingsTitle => 'Get your king to the other side of the board to win.';
+
+  @override
+  String get variantCrazyhouseTitle => 'Captured pieces can be dropped back on the board instead of moving a piece.';
+
+  @override
+  String get variantFromPositionTitle => 'Standard chess from a custom position';
 
   @override
   String get activityActivity => 'פעילות';
@@ -901,6 +973,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get broadcastScore => 'ניקוד';
 
   @override
+  String get broadcastStandingsDisclaimer => 'Standings are calculated using broadcasted games and may differ from official results.';
+
+  @override
   String get broadcastAllTeams => 'כל הקבוצות';
 
   @override
@@ -945,12 +1020,82 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get broadcastMatchPoints => 'Match Points';
+
+  @override
+  String get broadcastGamePoints => 'Game Points';
+
+  @override
+  String get broadcastMatches => 'Matches';
+
+  @override
+  String get broadcastMatchHistory => 'Match History';
+
+  @override
+  String get broadcastTeamResults => 'Team Results';
+
+  @override
+  String broadcastTermsAutomaticallyTranslated(String param) {
+    return 'The following term(s) will be automatically translated: $param.';
+  }
+
+  @override
   String broadcastRoundX(String param) {
     return 'סיבוב מספר $param';
   }
 
   @override
   String get broadcastDefaultRoundNameHelp => 'Keeping the default name will automatically translate it to all other languages.';
+
+  @override
+  String get broadcastOpenTournament => 'Open';
+
+  @override
+  String get broadcastWomenTournament => 'Women';
+
+  @override
+  String get broadcastMenTournament => 'Men';
+
+  @override
+  String get broadcastGirlsTournament => 'Girls';
+
+  @override
+  String get broadcastBoysTournament => 'Boys';
+
+  @override
+  String broadcastOpenUnderXAgeTournament(String param) {
+    return 'Open U$param';
+  }
+
+  @override
+  String broadcastGirlsUnderXAgeTournament(String param) {
+    return 'Girls U$param';
+  }
+
+  @override
+  String broadcastBoysUnderXAgeTournament(String param) {
+    return 'Boys U$param';
+  }
+
+  @override
+  String get broadcastQuarterfinals => 'Quarterfinals';
+
+  @override
+  String get broadcastSemifinals => 'Semifinals';
+
+  @override
+  String get broadcastFinals => 'Finals';
+
+  @override
+  String get broadcastTiebreaks => 'Tiebreaks';
+
+  @override
+  String broadcastGameX(String param) {
+    return 'Game $param';
+  }
+
+  @override
+  String get broadcastKnockouts => 'Knockouts';
 
   @override
   String broadcastNbBroadcasts(int count) {
@@ -1425,6 +1570,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get preferencesNotifyTournamentSoon => 'טורניר מתחיל בקרוב';
 
   @override
+  String get preferencesNotifyBroadcasts => 'Broadcasts you have subscribed to';
+
+  @override
   String get preferencesNotifyTimeAlarm => 'אוזל הזמן במשחק התכתבות';
 
   @override
@@ -1446,7 +1594,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get preferencesBlindfold => 'משחק עיוור';
 
   @override
-  String get puzzlePuzzles => 'פאזלים';
+  String get preferencesShowClockOnTheLeft => 'Show on the left on mobile devices';
+
+  @override
+  String get puzzlePuzzles => 'חידות';
 
   @override
   String get puzzlePuzzleThemes => 'חידות נושאיות';
@@ -1482,16 +1633,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get puzzleSpecialMoves => 'צעדים מיוחדים';
 
   @override
-  String get puzzleDidYouLikeThisPuzzle => 'האם אהבת את החידה הזאת?';
+  String get puzzleDidYouLikeThisPuzzle => 'אהבת את החידה?';
 
   @override
-  String get puzzleVoteToLoadNextOne => 'דרגו כדי לקבל את הפאזל הבא!';
+  String get puzzleVoteToLoadNextOne => 'יש לדרג לקבלת החידה הבאה!';
 
   @override
-  String get puzzleUpVote => 'אהבתם את החידה? הצביעו הצבעה עילית';
+  String get puzzleUpVote => 'הצבעה בעד החידה';
 
   @override
-  String get puzzleDownVote => 'לא אהבתם? הצביעו הצבעה תחתית';
+  String get puzzleDownVote => 'הצבעה נגד החידה';
 
   @override
   String get puzzleYourPuzzleRatingWillNotChange => 'דירוג החידות שלך לא ישתנה. שימו לב כי פתירת חידות אינה תחרות. הדירוג נועד לאפשר בחירה של חידות המתאימות לרמה הנוכחית שלך.';
@@ -1575,19 +1726,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String get puzzleDifficultyLevel => 'רמת קושי';
 
   @override
-  String get puzzleNormal => 'רגיל';
+  String get puzzleNormal => 'רגילה';
 
   @override
-  String get puzzleEasier => 'קל יותר';
+  String get puzzleEasier => 'קלה מאוד';
 
   @override
-  String get puzzleEasiest => 'מאוד קל';
+  String get puzzleEasiest => 'קלה ביותר';
 
   @override
-  String get puzzleHarder => 'קשה יותר';
+  String get puzzleHarder => 'קשה מאוד';
 
   @override
-  String get puzzleHardest => 'מאוד קשה';
+  String get puzzleHardest => 'קשה ביותר';
 
   @override
   String get puzzleExample => 'דוגמה';
@@ -1596,7 +1747,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get puzzleAddAnotherTheme => 'הוסיפו נושא חדש';
 
   @override
-  String get puzzleNextPuzzle => 'הפאזל הבא';
+  String get puzzleNextPuzzle => 'לחידה הבאה';
 
   @override
   String get puzzleJumpToNextPuzzleImmediately => 'המשיכו ישר לחידה הבאה';
@@ -1820,6 +1971,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get puzzleThemeCapturingDefenderDescription => 'הסרת כלי קריטי להגנה על כלי אחר, המאפשרת להכות את הכלי החשוף כעת במסע הבא.';
 
   @override
+  String get puzzleThemeCollinearMove => 'Collinear move';
+
+  @override
+  String get puzzleThemeCollinearMoveDescription => 'Two opposing pieces face each other, and one slides along the line of attack without capturing the enemy piece.';
+
+  @override
   String get puzzleThemeCornerMate => 'Corner mate';
 
   @override
@@ -1901,6 +2058,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get puzzleThemeEnPassantDescription => 'טקטיקה המשלבת את חוק ״הכאה דרך הילוכו\", בו רגלי יכול להכות רגלי יריב שעבר אותו בתנועתו על ידי מסע של שתי משבצות לפנים מהמשבצת ההתחלתית.';
 
   @override
+  String get puzzleThemeEpauletteMate => 'Epaulette mate';
+
+  @override
+  String get puzzleThemeEpauletteMateDescription => 'Two adjacent escape squares for a checked king are occupied by other pieces.';
+
+  @override
   String get puzzleThemeExposedKing => 'מלך חשוף';
 
   @override
@@ -1953,6 +2116,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get puzzleThemeMorphysMateDescription => 'Use the bishop to check the king, while your rook helps to confine it.';
+
+  @override
+  String get puzzleThemeSwallowstailMate => 'Swallow\'s tail mate';
+
+  @override
+  String get puzzleThemeSwallowstailMateDescription => 'A checkmate pattern that visually resembles the appearance of a swallow’s tail, similar to a V shape.';
 
   @override
   String get puzzleThemeTriangleMate => 'Triangle mate';
@@ -2215,9 +2384,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get createLobbyGame => 'יצירת משחק במבואה';
 
   @override
-  String get youPlayAs => 'לשחק בתור';
-
-  @override
   String get toInviteSomeoneToPlayGiveThisUrl => 'כדי להזמין מישהו לשחק, שתפו את הכתובת הזאת';
 
   @override
@@ -2228,6 +2394,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get orLetYourOpponentScanQrCode => 'אפשר גם לתת ליריב לסרוק את קוד ה־QR הזה';
+
+  @override
+  String get reusableChallengeUrl => 'Reusable challenge URL';
+
+  @override
+  String get permanentLinkForAnyoneToChallengeYou => 'A permanent link for anyone to challenge you with these exact settings.';
 
   @override
   String get waiting => 'ממתין';
@@ -2564,13 +2736,46 @@ class AppLocalizationsHe extends AppLocalizations {
   String get evaluationGauge => 'מד הערכה';
 
   @override
+  String get visualMotifs => 'Visual motifs';
+
+  @override
+  String get undefendedPieces => 'Undefended pieces';
+
+  @override
+  String get pinnedPieces => 'Pinned pieces';
+
+  @override
+  String get checkableKing => 'Checkable king';
+
+  @override
   String get multipleLines => 'המשכים מקבילים';
+
+  @override
+  String get multipleLinesDescription => 'Set number of evaluation lines and move arrows on the board';
+
+  @override
+  String get searchTime => 'Search time';
+
+  @override
+  String get searchTimeDescription => 'Set time to evaluate fresh positions';
+
+  @override
+  String get threads => 'Threads';
+
+  @override
+  String get threadsDescription => 'Set this below your CPU\'s thread count, the ticks mark a good safe choice';
+
+  @override
+  String get threadsDescriptionMobile => 'More threads will use more battery for better analysis';
 
   @override
   String get cpus => 'מעבדים';
 
   @override
   String get memory => 'זיכרון';
+
+  @override
+  String get memoryDescription => 'Higher values may improve performance';
 
   @override
   String get infiniteAnalysis => 'ניתוח אינסופי';
@@ -2685,6 +2890,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get variants => 'נגזרות שחמט';
 
   @override
+  String get variantsDescription => 'More ways to play';
+
+  @override
   String get timeControl => 'קטגוריית זמן';
 
   @override
@@ -2727,7 +2935,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get signupUsernameHint => 'ודאו ששם המשתמש שלכם מתאים גם לילדים. לא תוכלו לשנות אותו מאוחר יותר וחשבונות עם שמות משתמש לא הולמים יסגרו!';
 
   @override
-  String get signupEmailHint => 'רק לצורך איפוס הסיסמה.';
+  String get signupEmailPromise => 'We will only send you emails about your account and never share your email.';
 
   @override
   String get password => 'סיסמה';
@@ -2911,6 +3119,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get unlimited => 'בלתי מוגבל';
+
+  @override
+  String get unlimitedDescription => 'Take all the time you need';
 
   @override
   String get mode => 'מצב';
@@ -3154,6 +3365,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get gameAsGIF => 'המשחק בתור GIF';
 
   @override
+  String get playerNames => 'Player names';
+
+  @override
+  String get moveAnnotations => 'Move annotations';
+
+  @override
   String get pasteTheFenStringHere => 'הדביקו מחרוזת FEN כאן';
 
   @override
@@ -3161,9 +3378,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get orUploadPgnFile => 'או העלו קובץ PGN';
-
-  @override
-  String get fromPosition => 'מעמדה מסוימת';
 
   @override
   String get continueFromHere => 'המשיכו מכאן';
@@ -3605,6 +3819,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get invalidAuthenticationCode => 'קוד אימות לא תקין';
 
   @override
+  String get clearField => 'Clear field';
+
+  @override
+  String get orSeparator => 'Or';
+
+  @override
+  String get logInByEmail => 'Log in by email';
+
+  @override
   String get emailMeALink => 'שלחו לי קישור בדוא״ל';
 
   @override
@@ -3975,21 +4198,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get keyEnterOrExitVariation => 'כנס לגרסה או צא ממנה';
 
   @override
-  String get keyRequestComputerAnalysis => 'בקשו ניתוח ממוחשב, למדו מטעויותיכם';
-
-  @override
-  String get keyNextLearnFromYourMistakes => 'הבא (למדו מטעויותיכם)';
-
-  @override
-  String get keyNextBlunder => 'הטעות הגסה הבאה';
-
-  @override
-  String get keyNextMistake => 'הטעות הבאה';
-
-  @override
-  String get keyNextInaccuracy => 'אי־הדיוק הבא';
-
-  @override
   String get keyPreviousBranch => 'הענף הקודם';
 
   @override
@@ -4270,6 +4478,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get brightness => 'בהירות';
+
+  @override
+  String get contrast => 'Contrast';
 
   @override
   String get hue => 'גוון';
@@ -4901,7 +5112,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get clearSearch => 'ניקוי החיפוש';
 
   @override
+  String thereAreNoResultsForX(String param) {
+    return 'No results for \"$param\"';
+  }
+
+  @override
   String get tags => 'תגיות';
+
+  @override
+  String get enPassant => 'En passant rights';
 
   @override
   String opponentLeftCounter(int count) {
@@ -6286,6 +6505,9 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get teamIncorrectEntryCode => 'סיסמא שגויה.';
 
   @override
   String teamBattleOfNbTeams(int count) {

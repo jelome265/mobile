@@ -175,6 +175,7 @@ class BroadcastCarouselItem extends ConsumerStatefulWidget {
           startsAt: null,
           finishedAt: null,
           startsAfterPrevious: false,
+          customScoring: null,
         ),
         group: null,
         roundToLinkId: BroadcastRoundId(''),
@@ -466,7 +467,7 @@ class _BroadcastCardContent extends StatelessWidget {
                         : Icons.share_outlined,
                     label: context.l10n.studyShareAndExport,
                     onPressed: () {
-                      showBroadcastShareMenu(context, broadcast);
+                      showBroadcastShareMenu(context, broadcast.tour, broadcast.round);
                     },
                   ),
                 ],

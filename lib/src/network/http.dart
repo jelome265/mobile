@@ -25,7 +25,7 @@ import 'package:lichess_mobile/src/constants.dart';
 import 'package:lichess_mobile/src/model/auth/auth_controller.dart';
 import 'package:lichess_mobile/src/model/auth/bearer.dart';
 import 'package:lichess_mobile/src/model/common/preloaded_data.dart';
-import 'package:lichess_mobile/src/model/http_log/http_log_storage.dart';
+import 'package:lichess_mobile/src/model/log/http_log_storage.dart';
 import 'package:lichess_mobile/src/model/user/user.dart';
 import 'package:lichess_mobile/src/network/aggregator.dart';
 import 'package:logging/logging.dart';
@@ -196,31 +196,35 @@ Future<bool> downloadFile(
   Client client,
   Uri url,
   File file, {
+  int? expectedLength,
   void Function(int received, int length)? onProgress,
 }) async {
-  debugPrint('Downloading $url to ${file.path}');
+  _logger.fine('Downloading $url to ${file.path}');
 
   final response = await client.send(Request('GET', url));
   final sink = file.openWrite();
 
   int received = 0;
+  final totalLength = response.contentLength ?? expectedLength;
 
   try {
     await response.stream
         .map((s) {
           received += s.length;
-          onProgress?.call(received, response.contentLength!);
+          if (totalLength != null && totalLength > 0) {
+            onProgress?.call(received, totalLength);
+          }
           return s;
         })
         .pipe(sink);
   } catch (e) {
-    debugPrint('Failed to download file: $e');
+    _logger.warning('Failed to download file: $e');
   } finally {
     try {
       await sink.flush();
       await sink.close();
     } on FileSystemException catch (e) {
-      debugPrint('Failed to save file: $e');
+      _logger.warning('Failed to save file: $e');
     }
   }
 
@@ -235,10 +239,14 @@ Future<bool> downloadFiles(
   Client client,
   List<Uri> urls,
   List<File> files, {
+  List<int>? expectedLengths,
   void Function(int received, int length)? onProgress,
 }) async {
   if (urls.length != files.length) {
     throw ArgumentError('Urls and files must have the same length.');
+  }
+  if (expectedLengths != null && expectedLengths.length != urls.length) {
+    throw ArgumentError('expectedLengths must have the same length as urls.');
   }
 
   // aggregrate progress of all files
@@ -254,6 +262,7 @@ Future<bool> downloadFiles(
         client,
         url,
         file,
+        expectedLength: expectedLengths?[index],
         onProgress: (received, length) {
           fileReceived[url] = received;
           fileLengths[url] = length;
@@ -311,9 +320,10 @@ class _RegisterCallbackClient extends BaseClient {
 
 /// Lichess HTTP client.
 ///
-/// * All requests made with [head], [get], [post], [put], [patch], [delete] target
-/// the lichess server, defined in [kLichessHost]. It does not apply to the low-level
-/// [send] method.
+/// * Requests made with [head], [get], [post], [put], [patch], [delete] that contain
+/// only a path (no host or scheme) are automatically routed to the lichess server
+/// defined in [kLichessHost]. If the URL already contains a host and scheme, it is
+/// used as-is. It does not apply to the low-level [send] method.
 /// * Sets the Authorization header when a token has been stored.
 /// * Sets the user-agent header with the app version, build number, and device info. If the user is logged in, it also includes the user's id.
 /// * Logs all requests and responses with status code >= 400.
@@ -321,6 +331,8 @@ class _RegisterCallbackClient extends BaseClient {
 /// and deletes the authUser if it's not.
 class LichessClient implements Client {
   LichessClient(this._inner, this._ref);
+
+  static const defaultRequestTimeout = Duration(seconds: 15);
 
   final Ref _ref;
   final Client _inner;
@@ -343,7 +355,7 @@ class LichessClient implements Client {
     _logger.info('${request.method} ${request.url} ${request.headers['User-Agent']}');
 
     try {
-      final response = await _inner.send(request);
+      final response = await _inner.send(request).timeout(defaultRequestTimeout);
 
       _logIfError(response);
 
@@ -434,7 +446,7 @@ class LichessClient implements Client {
   ]) async {
     final request = Request(
       method,
-      lichessUri(url.path, url.hasQuery ? url.queryParameters : null),
+      url.host.isNotEmpty ? url : lichessUri(url.path, url.hasQuery ? url.queryParameters : null),
     );
 
     if (headers != null) request.headers.addAll(headers);
@@ -840,8 +852,8 @@ extension ClientRefExtension on Ref {
   ///
   /// This is primarily used for caching network requests in a [FutureProvider].
   ///
-  /// If [fn] throws with a [SocketException], the provider is not kept alive, this
-  /// allows to retry the request later.
+  /// If [fn] throws with a [ServerException], the provider is kept alive as we don't want to retry
+  /// server errors immediately.
   Future<U> withClientCacheFor<U>(Future<U> Function(LichessClient) fn, Duration duration) async {
     final link = keepAlive();
     final timer = Timer(duration, link.close);
@@ -851,10 +863,9 @@ extension ClientRefExtension on Ref {
     });
     try {
       return await fn(client);
-    } on SocketException catch (_) {
-      link.close();
+    } on ServerException {
       rethrow;
-    } on ClientException catch (_) {
+    } on Exception {
       link.close();
       rethrow;
     }
@@ -864,8 +875,8 @@ extension ClientRefExtension on Ref {
   ///
   /// This is primarily used for caching network requests in a [FutureProvider].
   ///
-  /// If [fn] throws with a [SocketException], the provider is not kept alive, this
-  /// allows to retry the request later.
+  /// If [fn] throws with a [ServerException], the provider is kept alive as we don't want to retry
+  /// server errors immediately.
   Future<U> withAggregatorCacheFor<U>(
     Future<U> Function(LichessClient, Aggregator) fn,
     Duration duration,
@@ -879,10 +890,9 @@ extension ClientRefExtension on Ref {
     });
     try {
       return await fn(client, aggregator);
-    } on SocketException catch (_) {
-      link.close();
+    } on ServerException {
       rethrow;
-    } on ClientException catch (_) {
+    } on Exception {
       link.close();
       rethrow;
     }

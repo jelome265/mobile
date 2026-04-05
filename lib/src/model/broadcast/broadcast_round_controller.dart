@@ -62,8 +62,6 @@ class BroadcastRoundController extends AsyncNotifier<BroadcastRoundState> {
 
     _subscription = _socketClient.stream.listen(_handleSocketEvent);
 
-    await _socketClient.firstConnection;
-
     _socketOpenSubscription = _socketClient.connectedStream.listen((_) {
       if (ref.mounted && state.value?.round.status == RoundStatus.live) {
         _syncRoundDebouncer(() {
@@ -71,6 +69,8 @@ class BroadcastRoundController extends AsyncNotifier<BroadcastRoundState> {
         });
       }
     });
+
+    await _socketClient.firstConnection;
 
     _appLifecycleListener = AppLifecycleListener(
       onResume: () {
@@ -285,7 +285,7 @@ class BroadcastRoundController extends AsyncNotifier<BroadcastRoundState> {
   void _sendEvalMultiGet() {
     final round = state.requireValue;
     final prefs = ref.read(broadcastPreferencesProvider);
-    if (prefs.showEvaluationGauge == false || round.observedGames.isEmpty) return;
+    if (prefs.showRoundEvaluationGauges == false || round.observedGames.isEmpty) return;
 
     _socketClient.send('evalGetMulti', {
       'fens': [for (final id in round.observedGames) round.games[id]!.fen],

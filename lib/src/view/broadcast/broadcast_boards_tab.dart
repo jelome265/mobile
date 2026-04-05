@@ -66,6 +66,7 @@ class BroadcastBoardsTab extends ConsumerWidget {
                 title: value.round.name,
                 tournamentSlug: tournamentSlug,
                 roundSlug: value.round.slug,
+                customScoring: value.round.customScoring,
               ),
       AsyncError(:final error) => Center(
         child: Center(child: Text('Could not load broadcast: $error')),
@@ -83,6 +84,7 @@ class BroadcastPreview extends ConsumerStatefulWidget {
     required this.title,
     required this.tournamentSlug,
     required this.roundSlug,
+    required this.customScoring,
   });
 
   // A circular progress indicator is used instead of shimmers currently
@@ -92,7 +94,8 @@ class BroadcastPreview extends ConsumerStatefulWidget {
       games = null,
       title = '',
       tournamentSlug = '',
-      roundSlug = '';
+      roundSlug = '',
+      customScoring = null;
 
   final BroadcastTournamentId tournamentId;
   final BroadcastRoundId roundId;
@@ -100,6 +103,7 @@ class BroadcastPreview extends ConsumerStatefulWidget {
   final String title;
   final String tournamentSlug;
   final String roundSlug;
+  final BroadcastCustomScoring? customScoring;
   @override
   ConsumerState<BroadcastPreview> createState() => _BroadcastPreviewState();
 }
@@ -122,8 +126,8 @@ class _BroadcastPreviewState extends ConsumerState<BroadcastPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final showEvaluationBar = ref.watch(
-      broadcastPreferencesProvider.select((value) => value.showEvaluationBar),
+    final showEvaluationGauges = ref.watch(
+      broadcastPreferencesProvider.select((value) => value.showRoundEvaluationGauges),
     );
     const numberLoadingBoards = 12;
     const boardSpacing = 10.0;
@@ -184,7 +188,7 @@ class _BroadcastPreviewState extends ConsumerState<BroadcastPreview> {
             delegate: SliverChildBuilderDelegate((context, index) {
               final boardSize =
                   boardWithMaybeEvalBarWidth -
-                  (showEvaluationBar
+                  (showEvaluationGauges
                       ? boardThumbnailEvalGaugeAspectRatio * boardWithMaybeEvalBarWidth
                       : 0);
 
@@ -206,10 +210,11 @@ class _BroadcastPreviewState extends ConsumerState<BroadcastPreview> {
                 tournamentId: widget.tournamentId,
                 tournamentSlug: widget.tournamentSlug,
                 roundSlug: widget.roundSlug,
-                showEvaluationBar: showEvaluationBar,
+                showEvaluationGauge: showEvaluationGauges,
                 boardSize: boardSize,
                 boardWithMaybeEvalBarWidth: boardWithMaybeEvalBarWidth,
                 playingSide: playingSide,
+                customScoring: widget.customScoring,
               );
             }, childCount: games == null ? numberLoadingBoards : games.length),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -234,10 +239,11 @@ class ObservedBoardThumbnail extends ConsumerStatefulWidget {
     required this.tournamentId,
     required this.tournamentSlug,
     required this.roundSlug,
-    required this.showEvaluationBar,
+    required this.showEvaluationGauge,
     required this.boardSize,
     required this.boardWithMaybeEvalBarWidth,
     required this.playingSide,
+    required this.customScoring,
   });
 
   final BroadcastRoundId roundId;
@@ -246,10 +252,11 @@ class ObservedBoardThumbnail extends ConsumerStatefulWidget {
   final BroadcastTournamentId tournamentId;
   final String tournamentSlug;
   final String roundSlug;
-  final bool showEvaluationBar;
+  final bool showEvaluationGauge;
   final double boardSize;
   final double boardWithMaybeEvalBarWidth;
   final Side playingSide;
+  final BroadcastCustomScoring? customScoring;
 
   @override
   ConsumerState<ObservedBoardThumbnail> createState() => _ObservedBoardThumbnailState();
@@ -300,7 +307,7 @@ class _ObservedBoardThumbnailState extends ConsumerState<ObservedBoardThumbnail>
         },
         orientation: Side.white,
         fen: widget.game.fen,
-        showEvaluationBar: widget.showEvaluationBar,
+        showEvaluationGauge: widget.showEvaluationGauge,
         whiteWinningChances: (widget.game.cp != null || widget.game.mate != null)
             ? ExternalEval(cp: widget.game.cp, mate: widget.game.mate).winningChances(Side.white)
             : null,
@@ -311,12 +318,14 @@ class _ObservedBoardThumbnailState extends ConsumerState<ObservedBoardThumbnail>
           game: widget.game,
           side: Side.black,
           playingSide: widget.playingSide,
+          customScoring: widget.customScoring,
         ),
         footer: _PlayerWidget(
           width: widget.boardWithMaybeEvalBarWidth,
           game: widget.game,
           side: Side.white,
           playingSide: widget.playingSide,
+          customScoring: widget.customScoring,
         ),
       ),
     );
@@ -349,12 +358,14 @@ class _PlayerWidget extends StatelessWidget {
     required this.game,
     required this.side,
     required this.playingSide,
+    required this.customScoring,
   });
 
   final BroadcastGame game;
   final Side side;
   final Side playingSide;
   final double width;
+  final BroadcastCustomScoring? customScoring;
 
   @override
   Widget build(BuildContext context) {
@@ -377,8 +388,11 @@ class _PlayerWidget extends StatelessWidget {
               const SizedBox(width: 5),
               if (game.isOver)
                 Text(
-                  game.status.resultToString(side),
-                  style: const TextStyle().copyWith(fontWeight: FontWeight.bold),
+                  resultString(customScoring, side, game.status),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: .bold,
+                    color: game.status.colorFor(side, context),
+                  ),
                 )
               else if (clock != null)
                 CountdownClockBuilder(

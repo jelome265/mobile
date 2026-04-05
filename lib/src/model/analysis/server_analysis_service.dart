@@ -49,6 +49,12 @@ class ServerAnalysisService {
   /// This will return a future that completes when the server analysis is
   /// launched (but not when it is finished).
   Future<void> requestAnalysis(GameId id, [Side? side]) async {
+    // If we are already listening for analysis updates of this exact game,
+    // don't tear everything down and reconnect.
+    if (_currentAnalysis.value == id && _socketSubscription != null && _analysisCompleter != null) {
+      return;
+    }
+
     _cancelAnalysis();
 
     final uri = Uri(path: '/watch/$id/${side?.name ?? Side.white}/v6');
@@ -95,6 +101,7 @@ class ServerAnalysisService {
       // of analyses is reached.
       if (e.statusCode == 400) {
         debugPrint('Analysis already requested for game $id');
+        _currentAnalysis.value = id.gameId;
       } else {
         debugPrint('ServerException requesting server analysis: $e');
         _cancelAnalysis();
@@ -154,12 +161,11 @@ class ServerAnalysisService {
     }
     for (final c in children) {
       final n2child = c as Map<String, dynamic>;
-      final id = n2child['id'] as String;
-      final n1child = n1.childById(UciCharPair.fromStringId(id));
+      final uci = n2child['uci'] as String;
+      final n1child = n1.childById(UciCharPair.fromUci(uci));
       if (n1child != null) {
         mergeOngoingAnalysis(n1child, n2child);
       } else {
-        final uci = n2child['uci'] as String;
         final san = n2child['san'] as String;
         final move = Move.parse(uci)!;
         n1.addChild(

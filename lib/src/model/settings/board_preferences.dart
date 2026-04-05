@@ -225,7 +225,7 @@ sealed class BoardPrefs with _$BoardPrefs implements Serializable {
     required Position position,
     required PlayerSide playerSide,
     required NormalMove? promotionMove,
-    required void Function(NormalMove, {bool? isDrop}) onMove,
+    required void Function(Move, {bool? viaDragAndDrop}) onMove,
     required void Function(Role? role) onPromotionSelection,
     Premovable? premovable,
   }) {
@@ -237,7 +237,11 @@ sealed class BoardPrefs with _$BoardPrefs implements Serializable {
       promotionMove: promotionMove,
       sideToMove: position.turn,
       validMoves: _makeLegalMoves(position, variant: variant, castlingMethod: castlingMethod),
+      droppable: variant == Variant.crazyhouse
+          ? (validDropSquares: position.legalDrops.squares.toISet())
+          : null,
       isCheck: boardHighlights && position.isCheck,
+      canPromoteToKing: variant == Variant.antichess,
     );
   }
 

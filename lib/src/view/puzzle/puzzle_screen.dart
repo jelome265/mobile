@@ -11,7 +11,7 @@ import 'package:lichess_mobile/src/model/analysis/analysis_controller.dart';
 import 'package:lichess_mobile/src/model/auth/auth_controller.dart';
 import 'package:lichess_mobile/src/model/common/chess.dart';
 import 'package:lichess_mobile/src/model/common/id.dart';
-import 'package:lichess_mobile/src/model/game/game_repository_providers.dart';
+import 'package:lichess_mobile/src/model/game/game_repository.dart';
 import 'package:lichess_mobile/src/model/puzzle/puzzle.dart';
 import 'package:lichess_mobile/src/model/puzzle/puzzle_angle.dart';
 import 'package:lichess_mobile/src/model/puzzle/puzzle_controller.dart';
@@ -45,6 +45,7 @@ import 'package:lichess_mobile/src/widgets/adaptive_choice_picker.dart';
 import 'package:lichess_mobile/src/widgets/board.dart';
 import 'package:lichess_mobile/src/widgets/bottom_bar.dart';
 import 'package:lichess_mobile/src/widgets/buttons.dart';
+import 'package:lichess_mobile/src/widgets/feedback.dart';
 import 'package:lichess_mobile/src/widgets/list.dart';
 import 'package:lichess_mobile/src/widgets/pgn.dart';
 import 'package:lichess_mobile/src/widgets/settings.dart';
@@ -365,7 +366,7 @@ class _BodyState extends ConsumerState<_Body> {
           ? PlayerSide.white
           : PlayerSide.black,
       promotionMove: puzzleState.promotionMove,
-      onMove: (move, {isDrop}) {
+      onMove: (move, {viaDragAndDrop}) {
         ref.read(ctrlProvider.notifier).onUserMove(move);
       },
       onPromotionSelection: (role) {
@@ -413,11 +414,12 @@ class _BodyState extends ConsumerState<_Body> {
                   mainAxisSize: MainAxisSize.max,
                   children: [
                     BoardWidget(
+                      boardKey: widget.boardKey,
                       size: boardSize,
                       fen: puzzleState.currentPosition.fen,
                       orientation: puzzleState.pov,
                       gameData: gameData,
-                      lastMove: puzzleState.lastMove as NormalMove?,
+                      lastMove: puzzleState.lastMove,
                       shapes: shapes,
                       settings: defaultSettings,
                     ),
@@ -503,11 +505,12 @@ class _BodyState extends ConsumerState<_Body> {
                         ? const EdgeInsets.symmetric(horizontal: kTabletBoardTableSidePadding)
                         : EdgeInsets.zero,
                     child: BoardWidget(
+                      boardKey: widget.boardKey,
                       size: boardSize,
                       fen: puzzleState.currentPosition.fen,
                       orientation: puzzleState.pov,
                       gameData: gameData,
-                      lastMove: puzzleState.lastMove as NormalMove?,
+                      lastMove: puzzleState.lastMove,
                       shapes: shapes,
                       settings: defaultSettings,
                     ),
@@ -535,7 +538,7 @@ class _BodyState extends ConsumerState<_Body> {
     return Theme.of(context).platform == TargetPlatform.android
         ? AndroidGesturesExclusionWidget(
             boardKey: widget.boardKey,
-            shouldExcludeGesturesOnFocusGained: () => puzzleState.mode != PuzzleMode.view,
+            shouldExcludeGesturesOnFocusGained: puzzleState.mode != PuzzleMode.view,
             shouldSetImmersiveMode: boardPreferences.immersiveModeWhilePlaying ?? false,
             child: content,
           )
@@ -775,34 +778,28 @@ class _BottomBarState extends ConsumerState<_BottomBar> {
           },
         ),
         BottomSheetAction(
-          makeLabel: (context) => Text(context.l10n.analysis),
-          onPressed: () {
-            Navigator.of(context).push(
-              AnalysisScreen.buildRoute(
-                context,
-                puzzleState.makeAnalysisOptions(
-                  ref.read(puzzleControllerProvider(widget.initialPuzzleContext).notifier).makePgn,
-                ),
-              ),
-            );
-          },
-        ),
-        BottomSheetAction(
-          makeLabel: (context) =>
-              Text(context.l10n.puzzleFromGameLink(puzzleState.puzzle.game.id.value)),
+          makeLabel: (context) => Text(context.l10n.mobileViewGame),
           onPressed: () async {
-            final game = await ref.read(archivedGameProvider(puzzleState.puzzle.game.id).future);
-            if (context.mounted) {
-              Navigator.of(context).push(
-                AnalysisScreen.buildRoute(
-                  context,
-                  AnalysisOptions.archivedGame(
-                    orientation: puzzleState.pov,
-                    gameId: game.id,
-                    initialMoveCursor: puzzleState.puzzle.puzzle.initialPly + 1,
+            try {
+              final game = await ref
+                  .read(gameRepositoryProvider)
+                  .getGame(puzzleState.puzzle.game.id);
+              if (context.mounted) {
+                Navigator.of(context).push(
+                  AnalysisScreen.buildRoute(
+                    context,
+                    AnalysisOptions.archivedGame(
+                      orientation: puzzleState.pov,
+                      gameId: game.id,
+                      initialMoveCursor: puzzleState.puzzle.puzzle.initialPly + 1,
+                    ),
                   ),
-                ),
-              );
+                );
+              }
+            } catch (_) {
+              if (context.mounted) {
+                showSnackBar(context, 'Could not load the game', type: SnackBarType.error);
+              }
             }
           },
         ),

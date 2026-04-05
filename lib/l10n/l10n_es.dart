@@ -67,6 +67,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileMustBeLoggedIn => 'Debes iniciar sesión para ver esta página.';
 
   @override
+  String get mobileNewGame => 'Partida nueva';
+
+  @override
   String get mobileNoSearchResults => 'Sin resultados';
 
   @override
@@ -240,6 +243,75 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileWelcomeToLichessApp => '¡Bienvenido a la aplicación de Lichess!';
+
+  @override
+  String get mobileViewGame => 'Ver partida';
+
+  @override
+  String get mobileCustomizeHomeTip => 'Consejo: ¡Puedes añadir más componentes a la pantalla de inicio o eliminar aquellos que no necesitas!';
+
+  @override
+  String get mobileCustomizeHomeTipDismiss => 'Descartar';
+
+  @override
+  String get mobileCustomizeButton => 'Personalizar';
+
+  @override
+  String get mobileStopShowingThreat => 'Dejar de mostrar amenaza';
+
+  @override
+  String get mobileTournamentCompleted => 'Completados';
+
+  @override
+  String get mobileTournamentJumpToMyPage => 'Ir a mi página';
+
+  @override
+  String get mobileDisplayModeCompact => 'Compacto';
+
+  @override
+  String get mobileDisplayModeDetailed => 'Detallado';
+
+  @override
+  String get mobileOpeningExplorerNotAvailableOffline => 'El explorador de aperturas no está disponible sin conexión.';
+
+  @override
+  String get mobileChallengeCreated => 'Desafío creado: Se te notificará cuando comience la partida.\nPuedes acceder a ella desde la pestaña de inicio.';
+
+  @override
+  String get mobilePreviousPage => 'Anterior';
+
+  @override
+  String get mobileOrImportPgnFile => 'O importa un archivo PGN';
+
+  @override
+  String get variantStandardTitle => 'Reglas de ajedrez estándar (FIDE)';
+
+  @override
+  String get variantChess960Title => 'La posición inicial de las piezas es aleatoria.';
+
+  @override
+  String get variantKingOfTheHillTitle => 'Lleva a tu rey al centro para ganar la partida.';
+
+  @override
+  String get variantThreeCheckTitle => 'Poner en jaque a tu oponente 3 veces para ganar la partida.';
+
+  @override
+  String get variantAntichessTitle => 'Pierde todas tus piezas (o una posición de ahogado) para ganar la partida.';
+
+  @override
+  String get variantAtomicTitle => 'Haz explotar al rey de tu oponente para ganar.';
+
+  @override
+  String get variantHordeTitle => 'Un jugador tiene un gran número de peones, el otro posee un ejército normal.';
+
+  @override
+  String get variantRacingKingsTitle => 'Lleva a tu rey al otro lado del tablero para ganar.';
+
+  @override
+  String get variantCrazyhouseTitle => 'Las piezas capturadas pueden volver a colocarse en el tablero en lugar de hacer un movimiento.';
+
+  @override
+  String get variantFromPositionTitle => 'Ajedrez estándar desde una posición personalizada';
 
   @override
   String get activityActivity => 'Actividad';
@@ -861,6 +933,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get broadcastScore => 'Resultado';
 
   @override
+  String get broadcastStandingsDisclaimer => 'Las clasificaciones se calculan con partidas retransmitidas y pueden ser distintas a las oficiales.';
+
+  @override
   String get broadcastAllTeams => 'Todos los equipos';
 
   @override
@@ -905,12 +980,82 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get broadcastMatchPoints => 'Puntos de enfrentamientos';
+
+  @override
+  String get broadcastGamePoints => 'Puntos de partidas';
+
+  @override
+  String get broadcastMatches => 'Enfrentamientos';
+
+  @override
+  String get broadcastMatchHistory => 'Historial de enfrentamientos';
+
+  @override
+  String get broadcastTeamResults => 'Resultados de equipo';
+
+  @override
+  String broadcastTermsAutomaticallyTranslated(String param) {
+    return 'El(Los) siguiente(s) término(s) se traducirá(n) automáticamente: $param.';
+  }
+
+  @override
   String broadcastRoundX(String param) {
     return 'Ronda $param';
   }
 
   @override
   String get broadcastDefaultRoundNameHelp => 'Si mantiene el nombre predeterminado se traducirá automáticamente al resto de idiomas.';
+
+  @override
+  String get broadcastOpenTournament => 'Abierto';
+
+  @override
+  String get broadcastWomenTournament => 'Femenino';
+
+  @override
+  String get broadcastMenTournament => 'Hombres';
+
+  @override
+  String get broadcastGirlsTournament => 'Femenino';
+
+  @override
+  String get broadcastBoysTournament => 'Chicos';
+
+  @override
+  String broadcastOpenUnderXAgeTournament(String param) {
+    return 'Abierto Sub$param';
+  }
+
+  @override
+  String broadcastGirlsUnderXAgeTournament(String param) {
+    return 'Femenino Sub$param';
+  }
+
+  @override
+  String broadcastBoysUnderXAgeTournament(String param) {
+    return 'Masculino sub$param';
+  }
+
+  @override
+  String get broadcastQuarterfinals => 'Cuartos de final';
+
+  @override
+  String get broadcastSemifinals => 'Semifinales';
+
+  @override
+  String get broadcastFinals => 'Finales';
+
+  @override
+  String get broadcastTiebreaks => 'Desempates';
+
+  @override
+  String broadcastGameX(String param) {
+    return 'Partida $param';
+  }
+
+  @override
+  String get broadcastKnockouts => 'Eliminatorias';
 
   @override
   String broadcastNbBroadcasts(int count) {
@@ -1383,6 +1528,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get preferencesNotifyTournamentSoon => 'El torneo empieza pronto';
 
   @override
+  String get preferencesNotifyBroadcasts => 'Transmisiones suscritas';
+
+  @override
   String get preferencesNotifyTimeAlarm => 'Poco tiempo restante en la partida por correspondencia';
 
   @override
@@ -1402,6 +1550,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get preferencesBlindfold => 'A ciegas';
+
+  @override
+  String get preferencesShowClockOnTheLeft => 'Aparece a la izquierda en dispositivos móviles';
 
   @override
   String get puzzlePuzzles => 'Ejercicios';
@@ -1768,6 +1919,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get puzzleThemeCapturingDefenderDescription => 'Eliminar una pieza fundamental para la defensa de otra, permitiendo capturar la pieza, ahora indefensa, en el futuro.';
 
   @override
+  String get puzzleThemeCollinearMove => 'Movimiento colinear';
+
+  @override
+  String get puzzleThemeCollinearMoveDescription => 'Dos piezas opuestas se enfrentan entre sí, y una se desliza a lo largo de la línea de ataque sin capturar la pieza enemiga.';
+
+  @override
   String get puzzleThemeCornerMate => 'Mate de la esquina';
 
   @override
@@ -1849,6 +2006,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get puzzleThemeEnPassantDescription => 'Una táctica que involucra la captura al paso, donde un peón puede capturar a un peón oponente que lo ha pasado por alto usando su movimiento inicial de dos casillas.';
 
   @override
+  String get puzzleThemeEpauletteMate => 'Mate de las hombreras';
+
+  @override
+  String get puzzleThemeEpauletteMateDescription => 'Las dos casillas de escape adyacentes al rey en jaque están ocupadas por otras piezas.';
+
+  @override
   String get puzzleThemeExposedKing => 'Rey expuesto';
 
   @override
@@ -1901,6 +2064,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get puzzleThemeMorphysMateDescription => 'Utiliza el alfil para dar jaque al rey, mientras que tu torre ayuda a mantenerlo confinado.';
+
+  @override
+  String get puzzleThemeSwallowstailMate => 'Mate cola de golondrina';
+
+  @override
+  String get puzzleThemeSwallowstailMateDescription => 'Un patrón de mate que se asemeja visualmente a la cola de una golondrina, en forma de V.';
 
   @override
   String get puzzleThemeTriangleMate => 'Mate del triángulo';
@@ -2163,9 +2332,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get createLobbyGame => 'Crear partida en la sala de espera';
 
   @override
-  String get youPlayAs => 'Juegas con';
-
-  @override
   String get toInviteSomeoneToPlayGiveThisUrl => 'Para invitar a alguien a jugar, comparte este enlace';
 
   @override
@@ -2176,6 +2342,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get orLetYourOpponentScanQrCode => 'O dile a tu oponente que escanee este código QR';
+
+  @override
+  String get reusableChallengeUrl => 'Enlace reutilizable del desafío';
+
+  @override
+  String get permanentLinkForAnyoneToChallengeYou => 'Enlace permanente para que cualquiera pueda desafiarte con estos ajustes concretos.';
 
   @override
   String get waiting => 'Esperando';
@@ -2512,13 +2684,46 @@ class AppLocalizationsEs extends AppLocalizations {
   String get evaluationGauge => 'Indicador de evaluación';
 
   @override
+  String get visualMotifs => 'Complementos visuales';
+
+  @override
+  String get undefendedPieces => 'Piezas no defendidas';
+
+  @override
+  String get pinnedPieces => 'Piezas clavadas';
+
+  @override
+  String get checkableKing => 'Rey en peligro';
+
+  @override
   String get multipleLines => 'Múltiples líneas';
+
+  @override
+  String get multipleLinesDescription => 'Establece la cantidad de líneas de evaluación y de flechas de movimiento en el tablero';
+
+  @override
+  String get searchTime => 'Tiempo de búsqueda';
+
+  @override
+  String get searchTimeDescription => 'Establece el tiempo para evaluar posiciones nuevas';
+
+  @override
+  String get threads => 'Hilos';
+
+  @override
+  String get threadsDescription => 'Establecer número inferior de hilos de la CPU; las marcas dan una elección segura';
+
+  @override
+  String get threadsDescriptionMobile => 'Más hilos darán un mejor análisis, aunque usará más batería';
 
   @override
   String get cpus => 'Procesadores';
 
   @override
   String get memory => 'Memoria';
+
+  @override
+  String get memoryDescription => 'Valores más altos pueden mejorar el rendimiento';
 
   @override
   String get infiniteAnalysis => 'Análisis infinito';
@@ -2633,6 +2838,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get variants => 'Variantes';
 
   @override
+  String get variantsDescription => 'Más formas de jugar';
+
+  @override
   String get timeControl => 'Control de tiempo';
 
   @override
@@ -2675,7 +2883,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get signupUsernameHint => 'Asegúrate de elegir un nombre de usuario apto para todos los públicos. ¡No podrás cambiarlo más tarde y se cerrará cualquier cuenta con un nombre de usuario inapropiado!';
 
   @override
-  String get signupEmailHint => 'Sólo lo usaremos para restablecer tu contraseña.';
+  String get signupEmailPromise => 'Solo te enviaremos correos sobre tu cuenta y nunca compartiremos el tuyo.';
 
   @override
   String get password => 'Contraseña';
@@ -2859,6 +3067,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get unlimited => 'Ilimitado';
+
+  @override
+  String get unlimitedDescription => 'Tómate tu tiempo';
 
   @override
   String get mode => 'Modo';
@@ -3102,6 +3313,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get gameAsGIF => 'Guardar partida en formato GIF';
 
   @override
+  String get playerNames => 'Nombres de jugadores';
+
+  @override
+  String get moveAnnotations => 'Anotación de los movimientos';
+
+  @override
   String get pasteTheFenStringHere => 'Pega el texto FEN aquí';
 
   @override
@@ -3109,9 +3326,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get orUploadPgnFile => 'o sube un archivo PGN';
-
-  @override
-  String get fromPosition => 'Desde posición';
 
   @override
   String get continueFromHere => 'Continuar desde aquí';
@@ -3553,6 +3767,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get invalidAuthenticationCode => 'Código de autenticación inválido';
 
   @override
+  String get clearField => 'Borrar campo';
+
+  @override
+  String get orSeparator => 'o';
+
+  @override
+  String get logInByEmail => 'Iniciar sesión con el correo electrónico';
+
+  @override
   String get emailMeALink => 'Envíame un enlace por correo electrónico';
 
   @override
@@ -3923,21 +4146,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get keyEnterOrExitVariation => 'entrar/salir de la variante';
 
   @override
-  String get keyRequestComputerAnalysis => 'Solicitar análisis del ordenador, aprende de tus errores';
-
-  @override
-  String get keyNextLearnFromYourMistakes => 'Siguiente (Aprende de tus errores)';
-
-  @override
-  String get keyNextBlunder => 'Siguiente error grave';
-
-  @override
-  String get keyNextMistake => 'Siguiente error';
-
-  @override
-  String get keyNextInaccuracy => 'Siguiente imprecisión';
-
-  @override
   String get keyPreviousBranch => 'Rama anterior';
 
   @override
@@ -4218,6 +4426,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get brightness => 'Brillo';
+
+  @override
+  String get contrast => 'Contraste';
 
   @override
   String get hue => 'Tono';
@@ -4849,7 +5060,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get clearSearch => 'Borrar búsqueda';
 
   @override
+  String thereAreNoResultsForX(String param) {
+    return 'Sin resultados para \"$param\"';
+  }
+
+  @override
   String get tags => 'Etiquetas';
+
+  @override
+  String get enPassant => 'Al paso';
 
   @override
   String opponentLeftCounter(int count) {
@@ -6134,6 +6353,9 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get teamIncorrectEntryCode => 'Código de entrada incorrecto.';
 
   @override
   String teamBattleOfNbTeams(int count) {
